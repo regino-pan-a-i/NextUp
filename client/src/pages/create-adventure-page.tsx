@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Calendar as CalendarIcon } from "lucide-react";
+import { ArrowLeft, Calendar as CalendarIcon, Check, X, Users, Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Experience } from "@shared/schema";
 import { insertAdventureSchema } from "@shared/schema";
 import { Calendar } from "@/components/ui/calendar";
@@ -30,10 +31,32 @@ type FormData = z.infer<typeof formSchema>;
 
 export default function CreateAdventurePage() {
   const [, setLocation] = useLocation();
+  const [selectedFriends, setSelectedFriends] = useState<Set<string>>(new Set());
+  const [showFriendsList, setShowFriendsList] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
   const [date, setDate] = useState<Date>();
 
+  const { data: friends = [], isLoading: loadingFriends } = useQuery<any[]>({
+    queryKey: ["/api/friends"],
+  });
+
+  const getSelectedFriendsData = () => {
+    return friends.filter(friend => selectedFriends.has(friend.id));
+  };
+  
+  const toggleFriend = (friendId: string) => {
+    const newSelected = new Set(selectedFriends);
+    if (newSelected.has(friendId)) {
+      newSelected.delete(friendId);
+    } else {
+      newSelected.add(friendId);
+    }
+    setSelectedFriends(newSelected);
+  };
+  const getInitials = (username: string) => {
+    return username.slice(0, 2).toUpperCase();
+  };
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -107,7 +130,34 @@ export default function CreateAdventurePage() {
       });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: async (newAdventure) => {
+      if (selectedFriends.size > 0) {
+        const invitePromises = Array.from(selectedFriends).map((friendId) =>
+          apiRequest("POST", "/api/invitations", {
+            userId: friendId,
+            adventureId: newAdventure.id,
+          })
+        );
+
+        try {
+          await Promise.all(invitePromises);
+          toast({
+            title: "Success",
+            description: `Adventure created and invites sent to ${selectedFriends.size} friend(s)!`,
+          });
+        } catch (err) {
+          toast({
+            title: "Partial Success",
+            description: "Adventure created but some invites failed to send.",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Success",
+          description: "Adventure created successfully!",
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/adventures"] });
       toast({
         title: "Success",
@@ -123,6 +173,28 @@ export default function CreateAdventurePage() {
       });
     },
   });
+  const respondToRequestMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const response = await apiRequest("PATCH", `/api/friends/${id}`, { status });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/friends"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/friends/pending"] });
+      toast({
+        title: "Success",
+        description: "Request updated!",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  
 
   const onSubmit = async (data: FormData) => {
     await createMutation.mutateAsync(data);
@@ -291,14 +363,116 @@ export default function CreateAdventurePage() {
             </CardContent>
           </Card>
 
-          {/* Friends section - coming soon */}
+          {/* Selected Friends Display */}
           <Card>
-            <CardContent className="p-6">
-              <Label className="block mb-3">Invite Friends</Label>
-              <div className="text-center py-8 text-muted-foreground">
-                <p className="text-sm">Friend invitations coming soon!</p>
-                <p className="text-xs mt-1">You'll be able to invite friends after creating the adventure</p>
-              </div>
+          <CardContent className="p-6">
+            <Label className="block mb-3">Invite Friends</Label>
+              {selectedFriends.size > 0 && (
+                <div className="mb-4">
+                  <div className="flex flex-wrap gap-2">
+                    {getSelectedFriendsData().map((friend) => (
+                      <div
+                        key={friend.id}
+                        className="flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-sm"
+                      >
+                        <Avatar className="h-6 w-6">
+                          <AvatarFallback className="text-xs">
+                            {getInitials(friend.username)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span>{friend.username}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-4 w-4 p-0 hover:bg-destructive/20"
+                          onClick={() => toggleFriend(friend.id)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Show/Hide Friends List */}
+              {!showFriendsList ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowFriendsList(true)}
+                  className="w-full h-12"
+                  data-testid="button-show-friends"
+                >
+                  <Users className="h-4 w-4 mr-2" />
+                  {selectedFriends.size > 0 
+                    ? `Selected ${selectedFriends.size} friend(s) - Add more` 
+                    : "Select friends to join the Adventure"
+                  }
+                </Button>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium">Select friends to invite to this adventure:</p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowFriendsList(false)}
+                    >
+                      Done
+                    </Button>
+                  </div>
+                  
+                  {loadingFriends ? (
+                    <div className="flex justify-center py-4">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : friends.length === 0 ? (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <p className="text-sm">No friends found</p>
+                      <p className="text-xs">Add friends to share adventures!</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {friends.map((friend) => {
+                        const isSelected = selectedFriends.has(friend.id);
+                        return (
+                          <div
+                            key={friend.id}
+                            className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                              isSelected 
+                                ? "bg-primary/10 border-primary border" 
+                                : "bg-muted/50 hover:bg-muted border border-transparent"
+                            }`}
+                            onClick={() => toggleFriend(friend.id)}
+                            data-testid={`friend-option-${friend.id}`}
+                          >
+                            <Avatar className="h-8 w-8">
+                              <AvatarFallback className="text-sm">
+                                {getInitials(friend.username)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium truncate">{friend.username}</p>
+                            </div>
+                            {isSelected && (
+                              <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                                <div className="h-2 w-2 rounded-full bg-primary-foreground" />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <p className="text-xs text-muted-foreground mt-2">
+                Selected friends will receive an invite for this Adventure after it's created.
+              </p>
             </CardContent>
           </Card>
 

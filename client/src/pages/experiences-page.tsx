@@ -170,7 +170,7 @@ export default function ExperiencesPage() {
       {/* Content */}
       <main className="px-4 py-6">
         <Tabs defaultValue="upcoming" className="w-full">
-          <TabsList className="flex w-full  mb-6">
+          <TabsList className="grid w-full grid-cols-3  mb-6">
             <TabsTrigger value="upcoming" data-testid="tab-upcoming">Upcoming</TabsTrigger>
             <TabsTrigger value="invitations" data-testid="tab-invitations">
               Recommendations
@@ -221,18 +221,7 @@ export default function ExperiencesPage() {
                 {/* Show pending recommendations first */}
                 {pendingRecommendations.map((recommendation) => (
                   <Card key={recommendation.id} className="hover-elevate border-primary/20">
-                    <CardContent className="p-0">
-                      {/* Photo */}
-                      {recommendation.experience.photoUrl && (
-                        <div className="aspect-[16/9] w-full overflow-hidden rounded-t-lg">
-                          <img 
-                            src={recommendation.experience.photoUrl} 
-                            alt={recommendation.experience.name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      )}
-                      
+                    <CardContent className="p-0">                    
                       <div className="p-4">
                         {/* Header with user info and status */}
                         <div className="flex items-start justify-between gap-4 mb-3">

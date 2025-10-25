@@ -9,9 +9,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Users, Search, UserPlus, Check, X, Loader2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Group } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 
 export default function FriendsPage() {
+  const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const { toast } = useToast();
 
@@ -32,6 +35,10 @@ export default function FriendsPage() {
       return response.json();
     },
     enabled: searchQuery.length >= 2,
+  });
+
+  const { data: groups = [], isLoading: loadingGroups } = useQuery<Group[]>({
+    queryKey: ["/api/groups"],
   });
 
   const sendRequestMutation = useMutation({
@@ -94,7 +101,7 @@ export default function FriendsPage() {
       {/* Content */}
       <main className="px-4 py-6">
         <Tabs defaultValue="friends" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsList className="grid w-full grid-cols-4 mb-6">
             <TabsTrigger value="friends" data-testid="tab-my-friends">My Friends</TabsTrigger>
             <TabsTrigger value="pending" data-testid="tab-pending">
               Pending
@@ -105,6 +112,7 @@ export default function FriendsPage() {
               )}
             </TabsTrigger>
             <TabsTrigger value="search" data-testid="tab-find-friends">Find Friends</TabsTrigger>
+            <TabsTrigger value="groups" data-testid="tab-groups">Groups</TabsTrigger>
           </TabsList>
 
           <TabsContent value="friends" className="mt-0">
@@ -246,6 +254,43 @@ export default function FriendsPage() {
                         <UserPlus className="h-4 w-4 mr-1" />
                         Add Friend
                       </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="groups" className="mt-0">
+            {loadingGroups ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : groups.length === 0 ? (
+              <EmptyState
+                icon={Users}
+                title="No Groups"
+                description="Create or join groups to coordinate adventures with friends."
+                actionLabel="Create Group"
+                onAction={() => setLocation("/groups/create")}
+              />
+            ) : (
+              <div className="space-y-4">
+                {groups.map((group: any) => (
+                  <Card
+                    key={group.id}
+                    className="hover-elevate cursor-pointer"
+                    data-testid={`card-group-${group.id}`}
+                    onClick={() => setLocation(`/groups/${group.id}`)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-semibold text-lg">{group.name}</h3>
+                          <p className="text-sm text-muted-foreground mt-1">{group.ownerId === undefined ? "" : "Group"}</p>
+                        </div>
+                        <div className="text-sm text-muted-foreground">Members</div>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}

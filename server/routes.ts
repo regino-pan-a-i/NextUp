@@ -1,11 +1,27 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { WebSocketServer } from "ws";
 import { setupAuth, isAuthenticated } from "./auth";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { insertExperienceSchema, insertAdventureSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // In-memory map of groupId -> Set<ws connections>
+  const wsClients = new Map<string, Set<any>>();
+
+  function broadcastToGroup(groupId: string, payload: unknown) {
+    const clients = wsClients.get(groupId);
+    if (!clients) return;
+    const msg = JSON.stringify(payload);
+    Array.from(clients).forEach((c) => {
+      try {
+        c.send(msg);
+      } catch (err) {
+        // ignore send errors; cleanup will occur on close
+      }
+    });
+  }
   // Setup authentication routes: /api/register, /api/login, /api/logout, /api/user
   setupAuth(app);
 
@@ -475,6 +491,165 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== OBJECT STORAGE ROUTES =====
+  // ===== GROUPS ROUTES =====
+
+  // Get all groups for current user (owned or member)
+  app.get("/api/groups", isAuthenticated, async (req, res) => {
+    try {
+      const groups = await storage.getGroups(req.user!.id);
+      res.json(groups);
+    } catch (error) {
+      console.error("Error fetching groups:", error);
+      res.status(500).json({ error: "Failed to fetch groups" });
+    }
+  });
+
+  // Get single group
+  app.get("/api/groups/:id", isAuthenticated, async (req, res) => {
+    try {
+      const group = await storage.getGroup(req.params.id);
+      if (!group) return res.sendStatus(404);
+      res.json(group);
+    } catch (error) {
+      console.error("Error fetching group:", error);
+      res.status(500).json({ error: "Failed to fetch group" });
+    }
+  });
+
+  // Create group
+  app.post("/api/groups", isAuthenticated, async (req, res) => {
+    try {
+      const ownerId = req.user!.id;
+      const { name } = req.body;
+      if (!name || typeof name !== "string") return res.status(400).json({ error: "Name is required" });
+
+      const group = await storage.createGroup({ name, ownerId });
+      res.status(201).json(group);
+    } catch (error) {
+      console.error("Error creating group:", error);
+      res.status(400).json({ error: "Failed to create group" });
+    }
+  });
+
+  // Update group (owner only)
+  app.patch("/api/groups/:id", isAuthenticated, async (req, res) => {
+    try {
+      const group = await storage.getGroup(req.params.id);
+      if (!group) return res.sendStatus(404);
+      if (group.ownerId !== req.user!.id) return res.sendStatus(403);
+
+      const updated = await storage.updateGroup(req.params.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating group:", error);
+      res.status(400).json({ error: "Failed to update group" });
+    }
+  });
+
+  // Delete group (owner only)
+  app.delete("/api/groups/:id", isAuthenticated, async (req, res) => {
+    try {
+      const group = await storage.getGroup(req.params.id);
+      if (!group) return res.sendStatus(404);
+      if (group.ownerId !== req.user!.id) return res.sendStatus(403);
+
+      await storage.deleteGroup(req.params.id);
+      res.sendStatus(204);
+    } catch (error) {
+      console.error("Error deleting group:", error);
+      res.status(500).json({ error: "Failed to delete group" });
+    }
+  });
+
+  // Group members
+  app.get("/api/groups/:id/members", isAuthenticated, async (req, res) => {
+    try {
+      const members = await storage.getGroupMembers(req.params.id);
+      res.json(members);
+    } catch (error) {
+      console.error("Error fetching group members:", error);
+      res.status(500).json({ error: "Failed to fetch group members" });
+    }
+  });
+
+  app.post("/api/groups/:id/members", isAuthenticated, async (req, res) => {
+    try {
+      const group = await storage.getGroup(req.params.id);
+      if (!group) return res.sendStatus(404);
+      // only owner can add members
+      if (group.ownerId !== req.user!.id) return res.sendStatus(403);
+
+      const { memberId } = req.body;
+      const member = await storage.addGroupMember(req.params.id, memberId);
+      res.status(201).json(member);
+    } catch (error) {
+      console.error("Error adding group member:", error);
+      res.status(400).json({ error: "Failed to add group member" });
+    }
+  });
+
+  app.delete("/api/groups/:id/members/:memberId", isAuthenticated, async (req, res) => {
+    try {
+      const group = await storage.getGroup(req.params.id);
+      if (!group) return res.sendStatus(404);
+      const memberId = req.params.memberId;
+      // allow owner or the member themselves to remove
+      if (req.user!.id !== group.ownerId && req.user!.id !== memberId) return res.sendStatus(403);
+
+      await storage.removeGroupMember(req.params.id, memberId);
+      res.sendStatus(204);
+    } catch (error) {
+      console.error("Error removing group member:", error);
+      res.status(400).json({ error: "Failed to remove group member" });
+    }
+  });
+
+  // ===== MESSAGES (group chat) =====
+
+  // Get messages for a group (most recent first)
+  app.get("/api/groups/:id/messages", isAuthenticated, async (req, res) => {
+    try {
+      const groupId = req.params.id;
+      const messages = await storage.getMessages(groupId);
+      res.json(messages);
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      res.status(500).json({ error: "Failed to fetch messages" });
+    }
+  });
+
+  // Post a message to a group. Only members or owner may post.
+  app.post("/api/groups/:id/messages", isAuthenticated, async (req, res) => {
+    try {
+      const groupId = req.params.id;
+      const group = await storage.getGroup(groupId);
+      if (!group) return res.sendStatus(404);
+
+      // Check membership/ownership
+      const userId = req.user!.id;
+      const members = await storage.getGroupMembers(groupId);
+      const isMember = group.ownerId === userId || members.some(m => m.memberId === userId);
+      if (!isMember) return res.sendStatus(403);
+
+      const { content } = req.body;
+      if (!content || typeof content !== "string") return res.status(400).json({ error: "content is required" });
+
+      const message = await storage.createMessage(groupId, userId, content);
+
+      // Broadcast to any connected websocket clients subscribed to this group
+      try {
+        broadcastToGroup(groupId, { type: "message", message });
+      } catch (err) {
+        // non-fatal
+      }
+
+      res.status(201).json(message);
+    } catch (error) {
+      console.error("Error creating message:", error);
+      res.status(400).json({ error: "Failed to create message" });
+    }
+  });
+
   
   // Get upload URL for experience photo
   app.post("/api/objects/upload", isAuthenticated, async (req, res) => {
@@ -574,6 +749,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+
+  // Setup a WebSocket server for real-time group chat broadcasts.
+  try {
+    const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+
+    wss.on("connection", (ws, req) => {
+      // Clients should send a JSON message to subscribe: { type: 'subscribe', groupId }
+      ws.on("message", (data) => {
+        try {
+          const parsed = JSON.parse(String(data));
+          if (parsed && parsed.type === "subscribe" && parsed.groupId) {
+            const groupId = String(parsed.groupId);
+            let set = wsClients.get(groupId);
+            if (!set) {
+              set = new Set();
+              wsClients.set(groupId, set);
+            }
+            set.add(ws);
+            // acknowledge
+            ws.send(JSON.stringify({ type: "subscribed", groupId }));
+          } else if (parsed && parsed.type === "unsubscribe" && parsed.groupId) {
+            const groupId = String(parsed.groupId);
+            const set = wsClients.get(groupId);
+            if (set) set.delete(ws);
+          }
+        } catch (err) {
+          // ignore malformed messages
+        }
+      });
+
+      ws.on("close", () => {
+        // remove from all groups
+        for (const [groupId, set] of Array.from(wsClients.entries())) {
+          if (set.has(ws)) {
+            set.delete(ws);
+            if (set.size === 0) wsClients.delete(groupId);
+          }
+        }
+      });
+    });
+  } catch (err) {
+    console.error("Failed to start WebSocket server:", err);
+  }
 
   return httpServer;
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -33,6 +33,8 @@ export default function CreateExperiencePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [photoUrl, setPhotoUrl] = useState<string>("");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -102,10 +104,59 @@ export default function CreateExperiencePage() {
           <Card>
             <CardContent className="p-6">
               <Label className="block mb-3 text-sm font-medium">Photo (Optional)</Label>
-              <div className="aspect-[16/9] bg-muted rounded-lg flex flex-col items-center justify-center gap-2 cursor-pointer hover-elevate border-2 border-dashed border-border">
-                <Upload className="h-8 w-8 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Upload photo</p>
-                <p className="text-xs text-muted-foreground">Coming soon with photo upload</p>
+              <div
+                className="aspect-[16/9] bg-muted rounded-lg flex flex-col items-center justify-center gap-2 cursor-pointer hover-elevate border-2 border-dashed border-border overflow-hidden"
+                onClick={() => fileInputRef.current?.click()}
+                data-testid="photo-dropzone"
+              >
+                {photoUrl ? (
+                  // preview via internal objects route
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={photoUrl} alt="preview" className="object-cover w-full h-full" />
+                ) : (
+                  <>
+                    <Upload className="h-8 w-8 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Upload photo</p>
+                    <p className="text-xs text-muted-foreground">Click to select a file</p>
+                  </>
+                )}
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    setUploading(true);
+                    try {
+                      const resp = await apiRequest("POST", "/api/objects/upload");
+                      const body = await resp.json();
+                      const uploadURL: string = body.uploadURL;
+                      const objectPath: string = body.objectPath;
+
+                      const putResp = await fetch(uploadURL, {
+                        method: "PUT",
+                        headers: {
+                          "Content-Type": f.type || "application/octet-stream",
+                        },
+                        body: f,
+                      });
+
+                      if (!putResp.ok) throw new Error("Upload failed");
+
+                      setPhotoUrl(objectPath);
+                    } catch (err: any) {
+                      console.error("Upload error:", err);
+                      toast({ title: "Upload failed", description: err?.message || "", variant: "destructive" });
+                    } finally {
+                      setUploading(false);
+                    }
+                  }}
+                />
+
+                {uploading && <p className="text-sm text-muted-foreground">Uploading...</p>}
               </div>
             </CardContent>
           </Card>

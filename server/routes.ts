@@ -270,17 +270,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (recommendation.toUserId !== req.user!.id) {
         return res.status(403).json({ error: "Unauthorized" });
       }
+
+      if (recommendation.status !== "Pending") {
+        return res.status(400).json({ 
+          error: `Recommendation already ${recommendation.status.toLowerCase()}`,
+          currentStatus: recommendation.status 
+        });
+      }
       
       // If accepted, create a copy of the experience for this user
       if (status === "Accepted") {
         const originalExperience = await storage.getExperience(recommendation.experienceId);
         if (originalExperience) {
+          const fromUser = await storage.getUser(recommendation.fromUserId);
+
+          const {id, userId, createdAt, updatedAt, ...experienceData} = originalExperience;
+
           await storage.createExperience({
-            ...originalExperience,
-            id: undefined as any,
+            ...experienceData,
+            // id: undefined as any,
             userId: req.user!.id,
-            status: "Received",
-            recommendedBy: originalExperience.recommendedBy || "Friend",
+            status: "Pending",
+            recommendedBy: fromUser?.username || "Friend",
           });
         }
       }

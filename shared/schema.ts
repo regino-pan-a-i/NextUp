@@ -5,7 +5,7 @@ import { z } from "zod";
 
 // Enums for status fields
 export const experienceStatusEnum = pgEnum("experience_status", [
-  "Received",
+  // "Received",
   "Pending", 
   "NextUp",
   "InProgress",
@@ -239,7 +239,7 @@ export type InsertInvitation = z.infer<typeof insertInvitationSchema>;
 
 // Enums as const for frontend use
 export const ExperienceStatus = {
-  Received: "Received",
+  
   Pending: "Pending",
   NextUp: "NextUp",
   InProgress: "InProgress",

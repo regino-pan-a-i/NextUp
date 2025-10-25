@@ -299,7 +299,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all adventures
   app.get("/api/adventures", isAuthenticated, async (req, res) => {
     try {
-      const adventures = await storage.getAdventures(req.user!.id);
+      const userId = req.user!.id;
+      const { experienceId } = req.query;
+
+      // Fetch adventures for the user (hosted or invited)
+      const adventures = await storage.getAdventures(userId);
+
+      // If an experienceId query param is provided, filter the results
+      if (experienceId) {
+        const filtered = adventures.filter(a => a.experienceId === String(experienceId));
+        return res.json(filtered);
+      }
+
       res.json(adventures);
     } catch (error) {
       console.error("Error fetching adventures:", error);

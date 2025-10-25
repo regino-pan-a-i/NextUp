@@ -202,9 +202,14 @@ export const insertRecommendationSchema = createInsertSchema(recommendations).om
   createdAt: true,
 });
 
-export const insertAdventureSchema = createInsertSchema(adventures).omit({
-  id: true,
-  createdAt: true,
+export const insertAdventureSchema = createInsertSchema(adventures, {
+    date: z.string().pipe(z.coerce.date()),
+    experienceId: z.string()
+        .nullish()
+        .transform(e => (e === "" ? null : e))
+  }).omit({
+    id: true,
+    createdAt: true,
 });
 
 export const insertInvitationSchema = createInsertSchema(invitations).omit({

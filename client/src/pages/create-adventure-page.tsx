@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useForm } from "react-hook-form";
+import { useForm, Controller} from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
@@ -19,6 +19,7 @@ import { useAuth } from "@/hooks/use-auth";
 
 const formSchema = insertAdventureSchema.extend({
   name: z.string().min(1, "Name is required"),
+  date: z.date(),
   hostId: z.string(),
 });
 
@@ -52,9 +53,10 @@ export default function CreateAdventurePage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: FormData) => {
+      const dateString = data.date ? data.date.toISOString() : null;
       const response = await apiRequest("POST", "/api/adventures", {
         ...data,
-        date: date ? date.toISOString() : null,
+        date: dateString,
       });
       return response.json();
     },
@@ -133,27 +135,38 @@ export default function CreateAdventurePage() {
               {/* Date */}
               <div className="space-y-2">
                 <Label>Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="w-full h-12 justify-start text-left font-normal"
-                      data-testid="button-select-date"
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {date ? format(date, "PPP") : <span>Pick a date</span>}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <Calendar
-                      mode="single"
-                      selected={date}
-                      onSelect={setDate}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
+                <Controller
+                    name="date" // This field name MUST match your formSchema
+                    control={form.control}
+                    render={({ field }) => (
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    className="w-full h-12 justify-start text-left font-normal"
+                                    data-testid="button-select-date"
+                                >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {/* Use RHF's field.value (which is a Date object) */}
+                                    {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                                <Calendar
+                                    mode="single"
+                                    // Pass RHF's value and onChange handlers
+                                    selected={field.value ?? undefined}
+                                    onSelect={field.onChange} // Connects selection back to RHF state
+                                    initialFocus
+                                />
+                            </PopoverContent>
+                        </Popover>
+                    )}
+                />
+                {form.formState.errors.date && (
+                    <p className="text-sm text-destructive">{form.formState.errors.date.message}</p>
+                )}
+            </div>
 
               {/* Cost and Time */}
               <div className="grid grid-cols-2 gap-4">

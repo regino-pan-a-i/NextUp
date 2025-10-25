@@ -6,7 +6,9 @@ import type {
 } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+// Default remove delay (milliseconds) applied after a toast is dismissed.
+// Set slightly longer than the visible duration to allow exit animations to finish.
+const TOAST_REMOVE_DELAY = 4500
 
 type ToasterToast = ToastProps & {
   id: string
@@ -152,7 +154,9 @@ function toast({ ...props }: Toast) {
   dispatch({
     type: "ADD_TOAST",
     toast: {
+      // Provide a sensible default duration (4 seconds) when none is supplied.
       ...props,
+      duration: props.duration ?? 4000,
       id,
       open: true,
       onOpenChange: (open) => {

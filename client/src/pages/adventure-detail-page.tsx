@@ -94,13 +94,45 @@ export default function AdventureDetailPage() {
                 </div>
               )}
 
-              {adventure.experienceId && (
-                <div className="mt-4">
-                  <Button onClick={() => setLocation(`/experiences/${adventure.experienceId}`)}>
-                    Open related experience
-                  </Button>
-                </div>
-              )}
+              {adventure.experienceId &&  (() => {
+                  function OwnerExperienceButton({ experienceId }: { experienceId: string }) {
+                    const { data: experience } = useQuery({
+                      queryKey: ["experiences", experienceId],
+                      queryFn: async () => {
+                        const res = await fetch(`/api/experiences/${experienceId}`);
+                        if (!res.ok) return null;
+                        return res.json();
+                      },
+                      enabled: !!experienceId,
+                    });
+
+                    const { data: me } = useQuery({
+                      queryKey: ["me"],
+                      queryFn: async () => {
+                        const res = await fetch("/api/me");
+                        if (!res.ok) return null;
+                        return res.json();
+                      },
+                    });
+
+                    const ownerId = experience?.user_id ?? experience?.userId;
+                    const currentUserId = me?.id ?? me?.user_id ?? me?.userId;
+
+                    if (!experience || !me) return null;
+                    if (ownerId !== currentUserId) return null;
+
+                    return (
+                      <div className="mt-4">
+                        <Button onClick={() => setLocation(`/experiences/${experienceId}`)}>
+                          Open related experience
+                        </Button>
+                      </div>
+                    );
+                  }
+
+                  return <OwnerExperienceButton experienceId={adventure.experienceId} />;
+                })()
+              }
             </div>
           </CardContent>
         </Card>

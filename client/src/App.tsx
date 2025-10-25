@@ -14,6 +14,7 @@ import ExperienceDetailPage from "@/pages/experience-detail-page";
 import FriendsPage from "@/pages/friends-page";
 import AdventuresPage from "@/pages/adventures-page";
 import CreateAdventurePage from "@/pages/create-adventure-page";
+import AdventureDetailPage from "@/pages/adventure-detail-page";
 import ProfilePage from "@/pages/profile-page";
 
 function Router() {
@@ -24,9 +25,10 @@ function Router() {
       <ProtectedRoute path="/experiences" component={ExperiencesPage} />
       <ProtectedRoute path="/experiences/create" component={CreateExperiencePage} />
       <ProtectedRoute path="/experiences/:id" component={ExperienceDetailPage} />
-      <ProtectedRoute path="/friends" component={FriendsPage} />
-      <ProtectedRoute path="/adventures" component={AdventuresPage} />
-      <ProtectedRoute path="/adventures/create" component={CreateAdventurePage} />
+  <ProtectedRoute path="/friends" component={FriendsPage} />
+  <ProtectedRoute path="/adventures" component={AdventuresPage} />
+  <ProtectedRoute path="/adventures/create" component={CreateAdventurePage} />
+  <ProtectedRoute path="/adventures/:id" component={AdventureDetailPage} />
       <ProtectedRoute path="/profile" component={ProfilePage} />
       <Route component={NotFound} />
     </Switch>

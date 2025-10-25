@@ -10,7 +10,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ArrowLeft, MapPin, DollarSign, Clock, Trash2, Loader2 } from "lucide-react";
-import { Experience, ExperienceStatus } from "@shared/schema";
+import { Experience, ExperienceStatus, Adventure } from "@shared/schema";
+import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +61,19 @@ export default function ExperienceDetailPage() {
       });
     },
   });
+
+  // Fetch any adventure already created for this experience
+  const { data: adventuresForExperience } = useQuery<Adventure[]>({
+    queryKey: ["/api/adventures", "byExperience", id],
+    queryFn: async () => {
+      const resp = await fetch(`/api/adventures?experienceId=${id}`);
+      if (!resp.ok) return [];
+      return resp.json();
+    },
+    enabled: !!id,
+  });
+
+  const existingAdventure = adventuresForExperience && adventuresForExperience.length > 0 ? adventuresForExperience[0] : null;
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
@@ -212,6 +226,62 @@ export default function ExperienceDetailPage() {
             <p className="text-xs text-muted-foreground mt-2">
               Track your progress through each stage of your experience journey
             </p>
+          </CardContent>
+        </Card>
+
+        {/* If an adventure already exists for this experience, show it */}
+        {existingAdventure ? (
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold">Adventure</h3>
+                  <p className="font-medium">{existingAdventure.name}</p>
+                  <div className="text-sm text-muted-foreground mt-2">
+                    {existingAdventure.place && (
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-muted-foreground" />
+                        <span>{existingAdventure.place}</span>
+                      </div>
+                    )}
+                    {existingAdventure.date && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <span>{format(new Date(existingAdventure.date), "PPP")}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <Button
+                    onClick={() => setLocation(`/adventures/${existingAdventure.id}`)}
+                    data-testid="button-open-adventure"
+                  >
+                    Open
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {/* Create Adventure */}
+        <Card>
+          <CardContent className="p-6 flex items-center justify-between gap-4">
+            <div className="flex-1">
+              <h3 className="font-semibold">Create Adventure</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                Turn this experience into an adventure.
+              </p>
+            </div>
+            <div>
+              <Button
+                onClick={() => setLocation(`/adventures/create?experienceId=${id}`)}
+                data-testid="button-create-adventure"
+              >
+                Create Adventure
+              </Button>
+            </div>
           </CardContent>
         </Card>
 

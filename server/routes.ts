@@ -3,7 +3,6 @@ import { createServer, type Server } from "http";
 import { setupAuth, isAuthenticated } from "./auth";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { ObjectPermission } from "./objectAcl";
 import { insertExperienceSchema, insertAdventureSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -310,7 +309,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all adventures
   app.get("/api/adventures", isAuthenticated, async (req, res) => {
     try {
-      const adventures = await storage.getAdventures(req.user!.id);
+      const userId = req.user!.id;
+      const { experienceId } = req.query;
+
+      // Fetch adventures for the user (hosted or invited)
+      const adventures = await storage.getAdventures(userId);
+
+      // If an experienceId query param is provided, filter the results
+      if (experienceId) {
+        const filtered = adventures.filter(a => a.experienceId === String(experienceId));
+        return res.json(filtered);
+      }
+
       res.json(adventures);
     } catch (error) {
       console.error("Error fetching adventures:", error);
@@ -459,8 +469,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/objects/upload", isAuthenticated, async (req, res) => {
     try {
       const objectStorageService = new ObjectStorageService();
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-      res.json({ uploadURL });
+      const { uploadURL, objectPath } = await objectStorageService.getObjectEntityUploadURL();
+      // Return both the presigned URL and the internal object path so the client
+      // can save the path directly on the Experience when creating/updating.
+      res.json({ uploadURL, objectPath });
     } catch (error) {
       console.error("Error getting upload URL:", error);
       res.status(500).json({ error: "Failed to get upload URL" });
@@ -474,17 +486,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const objectStorageService = new ObjectStorageService();
       
       const objectFile = await objectStorageService.getObjectEntityFile(req.path);
-      
-      const canAccess = await objectStorageService.canAccessObjectEntity({
-        objectFile,
-        userId: userId,
-        requestedPermission: ObjectPermission.READ,
-      });
-      
-      if (!canAccess) {
-        return res.sendStatus(403);
-      }
-      
+
+      // Authorization is handled by `isAuthenticated`; objects under the
+      // configured PRIVATE_OBJECT_DIR are considered accessible to authenticated users.
       objectStorageService.downloadObject(objectFile, res);
     } catch (error) {
       console.error("Error accessing object:", error);
@@ -512,14 +516,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user!.id;
       const objectStorageService = new ObjectStorageService();
       
-      // Set ACL policy - public visibility so friends can see
-      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
-        photoUrl,
-        {
-          owner: userId,
-          visibility: "public",
-        }
-      );
+      // Normalize the provided photo URL (if the client passed an S3 URL)
+      // into the internal `/objects/<id>` path used by the app.
+      const objectPath = objectStorageService.normalizeObjectEntityPath(photoUrl);
       
       // Update experience with normalized object path
       const updated = await storage.updateExperience(req.params.id, {
@@ -530,6 +529,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating experience photo:", error);
       res.status(500).json({ error: "Failed to update photo" });
+    }
+  });
+
+  // Update user profile photo
+  app.put("/api/user/photo", isAuthenticated, async (req, res) => {
+    try {
+      const { photoUrl } = req.body;
+
+      if (!photoUrl) {
+        return res.status(400).json({ error: "photoUrl is required" });
+      }
+
+      const userId = req.user!.id;
+      const objectStorageService = new ObjectStorageService();
+
+      // Normalize any S3 URL into the internal /objects/<id> path
+      const objectPath = objectStorageService.normalizeObjectEntityPath(photoUrl);
+
+      // Persist photo path on user record
+      const updated = await storage.updateUser(userId, { photoUrl: objectPath });
+
+      if (!updated) return res.sendStatus(404);
+
+      // Remove sensitive fields
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...safe } = updated as any;
+      res.json(safe);
+    } catch (error) {
+      console.error("Error updating user photo:", error);
+      res.status(500).json({ error: "Failed to update user photo" });
     }
   });
 

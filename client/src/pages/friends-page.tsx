@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Users, Search, UserPlus, Check, X, Loader2 } from "lucide-react";
+import { Users, Search, UserPlus, Check, X, Loader2, Clock } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Group } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -16,6 +16,7 @@ import { useLocation } from "wouter";
 export default function FriendsPage() {
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
+  const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   const { data: friends = [], isLoading: loadingFriends } = useQuery<any[]>({
@@ -46,19 +47,32 @@ export default function FriendsPage() {
       const response = await apiRequest("POST", "/api/friends/request", { friendId });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, friendId) => {
+      // Add to sent requests set
+      setSentRequests(prev => new Set([...prev, friendId]));
+      
       queryClient.invalidateQueries({ queryKey: ["/api/friends"] });
       toast({
         title: "Success",
         description: "Friend request sent!",
       });
     },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+    onError: (error: Error, friendId) => {
+      // If error is "already sent", also mark as sent
+      if (error.message.includes("already sent") || error.message.includes("already exists")) {
+        setSentRequests(prev => new Set([...prev, friendId]));
+        toast({
+          title: "Already Sent",
+          description: "You've already sent a friend request to this user.",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
     },
   });
 
@@ -88,6 +102,30 @@ export default function FriendsPage() {
     return username.slice(0, 2).toUpperCase();
   };
 
+  // Helper function to check if user is already a friend
+  const isAlreadyFriend = (userId: string) => {
+    return friends.some(friend => friend.id === userId);
+  };
+
+  // Helper function to check if there's a pending request from this user
+  const hasPendingRequest = (userId: string) => {
+    return pendingRequests.some(request => request.user.id === userId);
+  };
+
+  // Helper function to determine button state
+  const getButtonState = (userId: string) => {
+    if (isAlreadyFriend(userId)) {
+      return { type: 'friends', disabled: true, text: 'Friends', icon: Check };
+    }
+    if (hasPendingRequest(userId)) {
+      return { type: 'respond', disabled: true, text: 'Respond in Pending', icon: Clock };
+    }
+    if (sentRequests.has(userId)) {
+      return { type: 'pending', disabled: true, text: 'Request Sent', icon: Clock };
+    }
+    return { type: 'add', disabled: false, text: 'Add Friend', icon: UserPlus };
+  };
+
   return (
     <div className="min-h-screen pb-20 bg-background">
       {/* Header */}
@@ -95,7 +133,6 @@ export default function FriendsPage() {
         <h1 className="text-2xl font-bold mb-4" style={{ fontFamily: "var(--font-heading)" }}>
           Friends
         </h1>
-
       </header>
 
       {/* Content */}
@@ -231,32 +268,44 @@ export default function FriendsPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {searchResults.map((user: any) => (
-                  <Card key={user.id} className="hover-elevate">
-                    <CardContent className="p-4 flex items-center gap-3">
-                      <Avatar className="h-12 w-12">
-                        {user.photoUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={user.photoUrl} alt={user.username} className="object-cover w-full h-full rounded-full" />
-                        ) : (
-                          <AvatarFallback>{getInitials(user.username)}</AvatarFallback>
-                        )}
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold truncate">{user.username}</p>
-                      </div>
-                      <Button 
-                        size="sm" 
-                        onClick={() => sendRequestMutation.mutate(user.id)}
-                        disabled={sendRequestMutation.isPending}
-                        data-testid={`button-add-friend-${user.id}`}
-                      >
-                        <UserPlus className="h-4 w-4 mr-1" />
-                        Add Friend
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
+                {searchResults.map((user: any) => {
+                  const buttonState = getButtonState(user.id);
+                  const Icon = buttonState.icon;
+                  
+                  return (
+                    <Card key={user.id} className="hover-elevate">
+                      <CardContent className="p-4 flex items-center gap-3">
+                        <Avatar className="h-12 w-12">
+                          {user.photoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={user.photoUrl} alt={user.username} className="object-cover w-full h-full rounded-full" />
+                          ) : (
+                            <AvatarFallback>{getInitials(user.username)}</AvatarFallback>
+                          )}
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold truncate">{user.username}</p>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          onClick={() => {
+                            if (buttonState.type === 'add') {
+                              sendRequestMutation.mutate(user.id);
+                            }
+                          }}
+                          disabled={buttonState.disabled || sendRequestMutation.isPending}
+                          variant={buttonState.type === 'friends' ? 'default' : 
+                                  buttonState.type === 'pending' ? 'secondary' :
+                                  buttonState.type === 'respond' ? 'outline' : 'default'}
+                          data-testid={`button-add-friend-${user.id}`}
+                        >
+                          <Icon className="h-4 w-4 mr-1" />
+                          {buttonState.text}
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </TabsContent>

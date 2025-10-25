@@ -1,7 +1,7 @@
 // Referenced from javascript_auth_all_persistance blueprint
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
-import { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
@@ -93,7 +93,7 @@ export function setupAuth(app: Express) {
   });
 }
 
-export function isAuthenticated(req: Express.Request, res: Express.Response, next: Express.NextFunction) {
+export function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated()) {
     return next();
   }

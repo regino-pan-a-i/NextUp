@@ -20,6 +20,8 @@ import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { PlaceSearch } from "@/components/place-search-page";
+
 
 const formSchema = insertAdventureSchema.extend({
   name: z.string().min(1, "Name is required"),
@@ -284,12 +286,14 @@ export default function CreateAdventurePage() {
               {/* Place */}
               <div className="space-y-2">
                 <Label htmlFor="place">Location</Label>
-                <Input
+                <PlaceSearch
                   id="place"
+                  value={form.watch("place") || ""}
+                  onPlaceSelect={(place) => {
+                    setSelectedPlace(place);
+                    form.setValue("place", place?.name || "");
+                  }}
                   placeholder="Where will this adventure take place?"
-                  {...form.register("place")}
-                  data-testid="input-adventure-place"
-                  className="h-12"
                 />
               </div>
 

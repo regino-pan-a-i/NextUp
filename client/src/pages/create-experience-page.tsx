@@ -278,7 +278,7 @@ export default function CreateExperiencePage() {
 
               
               <div className="space-y-2">
-                <Label htmlFor="place">Place</Label>
+                <Label htmlFor="place">Location</Label>
                 <PlaceSearch
                   value={form.watch("place") || ""}
                   onPlaceSelect={(place) => {

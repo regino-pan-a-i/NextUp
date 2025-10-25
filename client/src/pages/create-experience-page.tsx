@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,6 +33,11 @@ export default function CreateExperiencePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [photoUrl, setPhotoUrl] = useState<string>("");
+
+
+  const { data: friends = [], isLoading: loadingFriends } = useQuery<any[]>({
+    queryKey: ["/api/friends"],
+  });
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -202,13 +207,33 @@ export default function CreateExperiencePage() {
               {/* Recommended by */}
               <div className="space-y-2">
                 <Label htmlFor="recommendedBy">Recommended by</Label>
-                <Input
-                  id="recommendedBy"
-                  placeholder="Who recommended this?"
-                  {...form.register("recommendedBy")}
-                  data-testid="input-experience-recommended-by"
-                  className="h-12"
-                />
+                <Select
+                  value={(form.watch("recommendedBy") ?? "") as string}
+                  onValueChange={(value) => form.setValue("recommendedBy", value as any)}
+                >
+                  <SelectTrigger className="h-12" data-testid="select-recommended-by">
+                    <SelectValue placeholder="Select a friend" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* Allow explicit none */}
+                    <SelectItem value="NONE">None</SelectItem>
+                    {loadingFriends ? (
+                      <SelectItem value="NONE" disabled>
+                        Loading...
+                      </SelectItem>
+                    ) : friends.length === 0 ? (
+                      <SelectItem value="NONE" disabled>
+                        No friends
+                      </SelectItem>
+                    ) : (
+                      friends.map((f: any) => (
+                        <SelectItem key={f.id ?? f.name ?? f} value={String(f.username)}>
+                          {f.username}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Status */}

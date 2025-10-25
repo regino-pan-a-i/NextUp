@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { PlaceSearch } from "@/components/place-search-page";
 import {
   Select,
   SelectContent,
@@ -36,6 +37,7 @@ export default function EditExperiencePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string>("");
   const [uploading, setUploading] = useState(false);
+  const [selectedPlace, setSelectedPlace] = useState<any>(null);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -79,11 +81,34 @@ export default function EditExperiencePage() {
       recommendedBy: experience.recommendedBy ?? "",
     });
     setPhotoUrl(experience.photoUrl ?? "");
+    if (experience.place && experience.placeId) {
+      setSelectedPlace({
+        place_id: experience.placeId,
+        name: experience.place,
+        formatted_address: experience.placeAddress || "",
+        rating: experience.placeRating,
+        photos: experience.placePhotoUrl ? [{ photo_reference: experience.placePhotoUrl.split('photo_reference=')[1]?.split('&')[0] }] : [],
+      });
+    }
   }, [experience]);
 
   const updateMutation = useMutation({
     mutationFn: async (data: FormData) => {
-      const resp = await apiRequest("PATCH", `/api/experiences/${id}`, data);
+      const placeData = selectedPlace ? {
+        placeId: selectedPlace.place_id,
+        placeAddress: selectedPlace.formatted_address,
+        placeRating: selectedPlace.rating,
+        placePhotoUrl: selectedPlace.photos?.[0]?.photo_reference ? 
+          `/api/places/photo?photo_reference=${selectedPlace.photos[0].photo_reference}&maxwidth=400` : null,
+      } : {
+        // Si no hay lugar seleccionado, limpiar los datos
+        placeId: null,
+        placeAddress: null,
+        placeRating: null,
+        placePhotoUrl: null,
+      };
+      const resp = await apiRequest("PATCH", `/api/experiences/${id}`, { ...data, photoUrl, ...placeData });
+      // const resp = await apiRequest("PATCH", `/api/experiences/${id}`, data);
       return resp.json();
     },
     onSuccess: (updated) => {
@@ -218,9 +243,21 @@ export default function EditExperiencePage() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
+              {/* <div className="space-y-2">
                 <Label htmlFor="place">Place</Label>
                 <Input id="place" {...form.register("place")} className="h-12" />
+              </div> */}
+
+              <div className="space-y-2">
+                <Label htmlFor="place">Place</Label>
+                <PlaceSearch
+                  value={form.watch("place") || ""}
+                  onPlaceSelect={(place) => {
+                    setSelectedPlace(place);
+                    form.setValue("place", place?.name || "");
+                  }}
+                  placeholder="Search for a place or location..."
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">

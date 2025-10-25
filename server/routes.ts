@@ -148,6 +148,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get user by id (safe; strips password)
+  app.get("/api/users/:id", isAuthenticated, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.params.id);
+      if (!user) return res.sendStatus(404);
+      // remove password before returning
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...safe } = user as any;
+      res.json(safe);
+    } catch (err) {
+      console.error("Error fetching user by id:", err);
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
+
   // Get friends list
   app.get("/api/friends", isAuthenticated, async (req, res) => {
     try {
@@ -216,7 +231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (status === "Declined") {
         await storage.deleteFriendship(req.params.id);
-        return res.sendStatus(204);
+        return res.status(204).json({ message: "Friend request declined" });
       }
       
       const updated = await storage.updateFriendshipStatus(req.params.id, "Accepted");
@@ -747,6 +762,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to update user photo" });
     }
   });
+
+  app.get("/api/places/search", async (req, res) => {
+  try {
+    const { q } = req.query;
+    
+    if (!q || typeof q !== 'string') {
+      return res.status(400).json({ error: "Search query required" });
+    }
+
+    const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "Google Places API not configured" });
+    }
+
+    const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(q)}&key=${apiKey}&fields=place_id,name,formatted_address,rating,user_ratings_total,price_level,photos,opening_hours,formatted_phone_number,website,types`;
+
+    const response = await fetch(searchUrl);
+    const data = await response.json();
+
+    if (!response.ok) {
+      return res.status(response.status).json({ error: data.error_message || "Places API error" });
+    }
+
+    res.json({
+      results: data.results || [],
+      status: data.status
+    });
+  } catch (error) {
+    console.error("Places search error:", error);
+    res.status(500).json({ error: "Failed to search places" });
+  }
+});
+
+// Get place photo
+app.get("/api/places/photo", async (req, res) => {
+  try {
+    const { photo_reference, maxwidth = "400" } = req.query;
+    
+    if (!photo_reference) {
+      return res.status(400).json({ error: "Photo reference required" });
+    }
+
+    const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "Google Places API not configured" });
+    }
+
+    const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?photoreference=${photo_reference}&maxwidth=${maxwidth}&key=${apiKey}`;
+
+    // Proxy the image request
+    const response = await fetch(photoUrl);
+    
+    if (!response.ok) {
+      return res.status(404).json({ error: "Photo not found" });
+    }
+
+    // Forward the image
+    const buffer = await response.arrayBuffer();
+    res.set({
+      'Content-Type': response.headers.get('content-type') || 'image/jpeg',
+      'Cache-Control': 'public, max-age=86400', // Cache for 1 day
+    });
+    res.send(Buffer.from(buffer));
+  } catch (error) {
+    console.error("Photo fetch error:", error);
+    res.status(500).json({ error: "Failed to fetch photo" });
+  }
+});
+
 
   const httpServer = createServer(app);
 

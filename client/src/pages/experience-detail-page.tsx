@@ -2,6 +2,7 @@ import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+
 import {
   Select,
   SelectContent,
@@ -28,6 +29,7 @@ export default function ExperienceDetailPage() {
   const { id } = useParams();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  
 
   const { data: experience, isLoading } = useQuery<Experience>({
     queryKey: ["/api/experiences", id],
@@ -38,6 +40,9 @@ export default function ExperienceDetailPage() {
     },
   });
 
+
+
+  
   const updateStatusMutation = useMutation({
     mutationFn: async (newStatus: string) => {
       const response = await apiRequest("PATCH", `/api/experiences/${id}`, {

@@ -370,9 +370,12 @@ export default function CreateExperiencePage() {
                         className="flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-sm"
                       >
                         <Avatar className="h-6 w-6">
-                          <AvatarFallback className="text-xs">
-                            {getInitials(friend.username)}
-                          </AvatarFallback>
+                          {friend.photoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={friend.photoUrl} alt={friend.username} className="object-cover w-full h-full rounded-full" />
+                          ) : (
+                            <AvatarFallback className="text-xs">{getInitials(friend.username)}</AvatarFallback>
+                          )}
                         </Avatar>
                         <span>{friend.username}</span>
                         <Button

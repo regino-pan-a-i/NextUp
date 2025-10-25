@@ -27,8 +27,8 @@ function Router() {
       <ProtectedRoute path="/experiences/:id" component={ExperienceDetailPage} />
   <ProtectedRoute path="/friends" component={FriendsPage} />
   <ProtectedRoute path="/adventures" component={AdventuresPage} />
-  <ProtectedRoute path="/adventures/:id" component={AdventureDetailPage} />
   <ProtectedRoute path="/adventures/create" component={CreateAdventurePage} />
+  <ProtectedRoute path="/adventures/:id" component={AdventureDetailPage} />
       <ProtectedRoute path="/profile" component={ProfilePage} />
       <Route component={NotFound} />
     </Switch>

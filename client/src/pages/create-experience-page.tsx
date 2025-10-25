@@ -38,11 +38,6 @@ export default function CreateExperiencePage() {
   const [showFriendsList, setShowFriendsList] = useState(false);
 
 
-
-  const { data: friends = [], isLoading: loadingFriends } = useQuery<any[]>({
-    queryKey: ["/api/friends"],
-  });
-
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -313,7 +308,8 @@ export default function CreateExperiencePage() {
 
           {/* Selected Friends Display */}
           <Card>
-          <CardContent>
+          <CardContent className="p-6">
+            <Label className="block mb-3">Send to a Friend</Label>
               {selectedFriends.size > 0 && (
                 <div className="mb-4">
                   <div className="flex flex-wrap gap-2">

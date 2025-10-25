@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useForm, Controller} from "react-hook-form";
+import { useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
@@ -9,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft, Calendar as CalendarIcon } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Experience } from "@shared/schema";
 import { insertAdventureSchema } from "@shared/schema";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -44,12 +47,56 @@ export default function CreateAdventurePage() {
     },
   });
 
+  // Fetch experiences list for the select dropdown
+  const { data: experiences } = useQuery<Experience[]>({
+    queryKey: ["/api/experiences"],
+    queryFn: async () => {
+      const res = await fetch("/api/experiences");
+      if (!res.ok) throw new Error("Failed to fetch experiences");
+      return res.json();
+    },
+  });
+
   // Update hostId when user loads
   useEffect(() => {
     if (user?.id) {
       form.setValue("hostId", user.id);
     }
   }, [user, form]);
+
+  // Parse experienceId from query param and prefill fields when available.
+  // Use window.location.search which is more reliable for query params than
+  // splitting the wouter location string.
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const experienceId = params.get("experienceId");
+      if (!experienceId) return;
+
+      // If experiences are loaded, find it and prefill
+      if (experiences) {
+        const found = experiences.find((e) => e.id === experienceId);
+        if (found) {
+          form.setValue("experienceId", found.id ?? "");
+          form.setValue("name", found.name ?? "");
+          form.setValue("place", found.place ?? "");
+          form.setValue("cost", found.moneyNeeded ?? 0);
+          // convert minutes to hours for the hours input
+          const hours = found.timeRequired ? found.timeRequired / 60 : 0;
+          form.setValue("timeRequired", Math.round(hours * 2) / 2);
+        } else {
+          // set the id anyway if the experience isn't in the initial list
+          form.setValue("experienceId", experienceId);
+        }
+      } else {
+        // experiences not loaded yet; set id so the select will update once loaded
+        form.setValue("experienceId", experienceId);
+      }
+    } catch (e) {
+      // ignore malformed URLSearchParams errors
+    }
+    // run when experiences load or on mount
+  }, [experiences, form]);
 
   const createMutation = useMutation({
     mutationFn: async (data: FormData) => {
@@ -89,7 +136,14 @@ export default function CreateAdventurePage() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setLocation("/adventures")}
+            // onClick={() => setLocation("/adventures")}
+            onClick={() => {
+              if (window.history.length > 1) {
+              window.history.back();
+              } else {
+              setLocation("/adventures");
+              }
+              }}
             data-testid="button-back"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -105,6 +159,41 @@ export default function CreateAdventurePage() {
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <Card>
             <CardContent className="p-6 space-y-4">
+              {/* Experience select */}
+              <div className="space-y-2">
+                <Label htmlFor="experience">From Experience</Label>
+                <Controller
+                  name="experienceId"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ?? ""}
+                      onValueChange={(val) => {
+                        field.onChange(val);
+                        const selected = experiences?.find((e) => e.id === val);
+                        if (selected) {
+                          form.setValue("name", selected.name ?? "");
+                          form.setValue("place", selected.place ?? "");
+                          form.setValue("cost", selected.moneyNeeded ?? 0);
+                          form.setValue("timeRequired", selected.timeRequired ? selected.timeRequired / 60 : 0);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-12">
+                        <SelectValue placeholder="Select an experience (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="false">None</SelectItem>
+                        {experiences?.map((exp) => (
+                          <SelectItem key={exp.id} value={exp.id}>
+                            {exp.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
               {/* Name */}
               <div className="space-y-2">
                 <Label htmlFor="name">Adventure Name *</Label>

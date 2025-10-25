@@ -128,7 +128,12 @@ export default function AdventuresPage() {
             ) : (
               <div className="space-y-4">
                 {upcomingAdventures.map((adventure: any) => (
-                  <Card key={adventure.id} className="hover-elevate" data-testid={`card-adventure-${adventure.id}`}>
+                  <Card
+                    key={adventure.id}
+                    className="hover-elevate cursor-pointer"
+                    data-testid={`card-adventure-${adventure.id}`}
+                    onClick={() => setLocation(`/adventures/${adventure.id}`)}
+                  >
                     <CardContent className="p-4">
                       <div className="flex gap-4">
                         {/* Date block */}
@@ -276,7 +281,11 @@ export default function AdventuresPage() {
             ) : (
               <div className="space-y-4">
                 {pastAdventures.map((adventure: any) => (
-                  <Card key={adventure.id} className="opacity-75">
+                  <Card
+                    key={adventure.id}
+                    className="opacity-75 cursor-pointer"
+                    onClick={() => setLocation(`/adventures/${adventure.id}`)}
+                  >
                     <CardContent className="p-4">
                       <h3 className="font-semibold">{adventure.name}</h3>
                       {adventure.date && (

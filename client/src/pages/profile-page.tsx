@@ -1,9 +1,12 @@
+import { useRef, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { BottomNav } from "@/components/bottom-nav";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Compass, Calendar, Users, LogOut } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function ProfilePage() {
   const { user, logoutMutation } = useAuth();
@@ -22,16 +25,65 @@ export default function ProfilePage() {
     await logoutMutation.mutateAsync();
   };
 
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const { toast } = useToast();
+
+  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const resp = await apiRequest("POST", "/api/objects/upload");
+      const body = await resp.json();
+      const uploadURL: string = body.uploadURL;
+      const objectPath: string = body.objectPath;
+
+      const putResp = await fetch(uploadURL, {
+        method: "PUT",
+        headers: { "Content-Type": file.type || "application/octet-stream" },
+        body: file,
+      });
+
+      if (!putResp.ok) throw new Error("Upload failed");
+
+  // Persist on user record and update the local auth cache so we don't reload
+  const updateResp = await apiRequest("PUT", "/api/user/photo", { photoUrl: objectPath });
+  const updatedUser = await updateResp.json();
+  queryClient.setQueryData(["/api/user"], updatedUser);
+    } catch (err: any) {
+      console.error("Profile upload error:", err);
+      toast({ title: "Upload failed", description: err?.message || "", variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen pb-20 bg-background">
       {/* Header */}
       <header className="bg-card border-b border-card-border px-4 py-6">
-        <div className="flex flex-col items-center gap-4">
-          <Avatar className="h-24 w-24">
-            <AvatarFallback className="text-2xl">
-              {user?.username && getInitials(user.username)}
-            </AvatarFallback>
-          </Avatar>
+          <div className="flex flex-col items-center gap-4">
+          <div onClick={() => fileInputRef.current?.click()} className="cursor-pointer">
+            <Avatar className="h-24 w-24">
+              {user?.photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={user.photoUrl} alt="profile" className="object-cover w-full h-full rounded-full" />
+              ) : (
+                <AvatarFallback className="text-2xl">
+                  {user?.username && getInitials(user.username)}
+                </AvatarFallback>
+              )}
+            </Avatar>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={onFileChange}
+            data-testid="input-profile-photo"
+          />
           <div className="text-center">
             <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-heading)" }}>
               {user?.username}

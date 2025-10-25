@@ -1,0 +1,528 @@
+import type { Express } from "express";
+import { createServer, type Server } from "http";
+import { setupAuth, isAuthenticated } from "./auth";
+import { storage } from "./storage";
+import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { ObjectPermission } from "./objectAcl";
+import { insertExperienceSchema, insertAdventureSchema } from "@shared/schema";
+
+export async function registerRoutes(app: Express): Promise<Server> {
+  // Setup authentication routes: /api/register, /api/login, /api/logout, /api/user
+  setupAuth(app);
+
+  // ===== EXPERIENCES ROUTES =====
+  
+  // Get all experiences for current user
+  app.get("/api/experiences", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const { category, status } = req.query;
+      
+      const experiences = await storage.getExperiences(userId, {
+        category: category as string,
+        status: status as string,
+      });
+      
+      res.json(experiences);
+    } catch (error) {
+      console.error("Error fetching experiences:", error);
+      res.status(500).json({ error: "Failed to fetch experiences" });
+    }
+  });
+
+  // Get single experience
+  app.get("/api/experiences/:id", isAuthenticated, async (req, res) => {
+    try {
+      const experience = await storage.getExperience(req.params.id);
+      
+      if (!experience) {
+        return res.status(404).json({ error: "Experience not found" });
+      }
+      
+      // Check if user owns this experience
+      if (experience.userId !== req.user!.id) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+      
+      res.json(experience);
+    } catch (error) {
+      console.error("Error fetching experience:", error);
+      res.status(500).json({ error: "Failed to fetch experience" });
+    }
+  });
+
+  // Create experience
+  app.post("/api/experiences", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const experienceData = insertExperienceSchema.parse(req.body);
+      
+      const experience = await storage.createExperience({
+        ...experienceData,
+        userId,
+      });
+      
+      res.status(201).json(experience);
+    } catch (error) {
+      console.error("Error creating experience:", error);
+      res.status(400).json({ error: "Failed to create experience" });
+    }
+  });
+
+  // Update experience
+  app.patch("/api/experiences/:id", isAuthenticated, async (req, res) => {
+    try {
+      const experience = await storage.getExperience(req.params.id);
+      
+      if (!experience) {
+        return res.status(404).json({ error: "Experience not found" });
+      }
+      
+      if (experience.userId !== req.user!.id) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+      
+      const updated = await storage.updateExperience(req.params.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating experience:", error);
+      res.status(400).json({ error: "Failed to update experience" });
+    }
+  });
+
+  // Delete experience
+  app.delete("/api/experiences/:id", isAuthenticated, async (req, res) => {
+    try {
+      const experience = await storage.getExperience(req.params.id);
+      
+      if (!experience) {
+        return res.status(404).json({ error: "Experience not found" });
+      }
+      
+      if (experience.userId !== req.user!.id) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+      
+      await storage.deleteExperience(req.params.id);
+      res.sendStatus(204);
+    } catch (error) {
+      console.error("Error deleting experience:", error);
+      res.status(500).json({ error: "Failed to delete experience" });
+    }
+  });
+
+  // ===== FRIENDS ROUTES =====
+  
+  // Search for users
+  app.get("/api/users/search", isAuthenticated, async (req, res) => {
+    try {
+      const query = req.query.q as string;
+      
+      if (!query || query.length < 2) {
+        return res.json([]);
+      }
+      
+      const users = await storage.searchUsers(query, req.user!.id);
+      
+      // Don't return passwords
+      const safeUsers = users.map(({ password, ...user }) => user);
+      res.json(safeUsers);
+    } catch (error) {
+      console.error("Error searching users:", error);
+      res.status(500).json({ error: "Failed to search users" });
+    }
+  });
+
+  // Get friends list
+  app.get("/api/friends", isAuthenticated, async (req, res) => {
+    try {
+      const friends = await storage.getFriends(req.user!.id);
+      
+      // Don't return passwords
+      const safeFriends = friends.map(({ password, ...friend }) => friend);
+      res.json(safeFriends);
+    } catch (error) {
+      console.error("Error fetching friends:", error);
+      res.status(500).json({ error: "Failed to fetch friends" });
+    }
+  });
+
+  // Get pending friend requests
+  app.get("/api/friends/pending", isAuthenticated, async (req, res) => {
+    try {
+      const requests = await storage.getPendingFriendRequests(req.user!.id);
+      
+      // Don't return passwords
+      const safeRequests = requests.map(req => ({
+        ...req,
+        user: { ...req.user, password: undefined },
+      }));
+      
+      res.json(safeRequests);
+    } catch (error) {
+      console.error("Error fetching pending requests:", error);
+      res.status(500).json({ error: "Failed to fetch pending requests" });
+    }
+  });
+
+  // Send friend request
+  app.post("/api/friends/request", isAuthenticated, async (req, res) => {
+    try {
+      const { friendId } = req.body;
+      const userId = req.user!.id;
+      
+      if (userId === friendId) {
+        return res.status(400).json({ error: "Cannot add yourself as friend" });
+      }
+      
+      // Check if friendship already exists
+      const existing = await storage.getFriendship(userId, friendId);
+      if (existing) {
+        return res.status(400).json({ error: "Friendship already exists" });
+      }
+      
+      const friendship = await storage.createFriendship({
+        userId,
+        friendId,
+        status: "Pending",
+      });
+      
+      res.status(201).json(friendship);
+    } catch (error) {
+      console.error("Error sending friend request:", error);
+      res.status(400).json({ error: "Failed to send friend request" });
+    }
+  });
+
+  // Accept/decline friend request
+  app.patch("/api/friends/:id", isAuthenticated, async (req, res) => {
+    try {
+      const { status } = req.body; // "Accepted" or "Declined"
+      
+      if (status === "Declined") {
+        await storage.deleteFriendship(req.params.id);
+        return res.sendStatus(204);
+      }
+      
+      const updated = await storage.updateFriendshipStatus(req.params.id, "Accepted");
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating friendship:", error);
+      res.status(400).json({ error: "Failed to update friendship" });
+    }
+  });
+
+  // ===== RECOMMENDATIONS ROUTES =====
+  
+  // Get received recommendations
+  app.get("/api/recommendations", isAuthenticated, async (req, res) => {
+    try {
+      const recommendations = await storage.getReceivedRecommendations(req.user!.id);
+      
+      // Remove passwords from user objects
+      const safeRecs = recommendations.map(rec => ({
+        ...rec,
+        fromUser: { ...rec.fromUser, password: undefined },
+      }));
+      
+      res.json(safeRecs);
+    } catch (error) {
+      console.error("Error fetching recommendations:", error);
+      res.status(500).json({ error: "Failed to fetch recommendations" });
+    }
+  });
+
+  // Send recommendation
+  app.post("/api/recommendations", isAuthenticated, async (req, res) => {
+    try {
+      const { toUserId, experienceId } = req.body;
+      const fromUserId = req.user!.id;
+      
+      // Verify the experience exists and belongs to the sender
+      const experience = await storage.getExperience(experienceId);
+      if (!experience || experience.userId !== fromUserId) {
+        return res.status(404).json({ error: "Experience not found" });
+      }
+      
+      const recommendation = await storage.createRecommendation({
+        fromUserId,
+        toUserId,
+        experienceId,
+        status: "Pending",
+      });
+      
+      res.status(201).json(recommendation);
+    } catch (error) {
+      console.error("Error creating recommendation:", error);
+      res.status(400).json({ error: "Failed to create recommendation" });
+    }
+  });
+
+  // Accept/decline recommendation
+  app.patch("/api/recommendations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const { status } = req.body; // "Accepted" or "Declined"
+      
+      const recommendation = await storage.getRecommendation(req.params.id);
+      if (!recommendation) {
+        return res.status(404).json({ error: "Recommendation not found" });
+      }
+      
+      if (recommendation.toUserId !== req.user!.id) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+      
+      // If accepted, create a copy of the experience for this user
+      if (status === "Accepted") {
+        const originalExperience = await storage.getExperience(recommendation.experienceId);
+        if (originalExperience) {
+          await storage.createExperience({
+            ...originalExperience,
+            id: undefined as any,
+            userId: req.user!.id,
+            status: "Received",
+            recommendedBy: originalExperience.recommendedBy || "Friend",
+          });
+        }
+      }
+      
+      const updated = await storage.updateRecommendationStatus(req.params.id, status);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating recommendation:", error);
+      res.status(400).json({ error: "Failed to update recommendation" });
+    }
+  });
+
+  // ===== ADVENTURES ROUTES =====
+  
+  // Get all adventures
+  app.get("/api/adventures", isAuthenticated, async (req, res) => {
+    try {
+      const adventures = await storage.getAdventures(req.user!.id);
+      res.json(adventures);
+    } catch (error) {
+      console.error("Error fetching adventures:", error);
+      res.status(500).json({ error: "Failed to fetch adventures" });
+    }
+  });
+
+  // Get single adventure
+  app.get("/api/adventures/:id", isAuthenticated, async (req, res) => {
+    try {
+      const adventure = await storage.getAdventure(req.params.id);
+      
+      if (!adventure) {
+        return res.status(404).json({ error: "Adventure not found" });
+      }
+      
+      res.json(adventure);
+    } catch (error) {
+      console.error("Error fetching adventure:", error);
+      res.status(500).json({ error: "Failed to fetch adventure" });
+    }
+  });
+
+  // Create adventure
+  app.post("/api/adventures", isAuthenticated, async (req, res) => {
+    try {
+      const hostId = req.user!.id;
+      const adventureData = insertAdventureSchema.parse(req.body);
+      
+      const adventure = await storage.createAdventure({
+        ...adventureData,
+        hostId,
+      });
+      
+      res.status(201).json(adventure);
+    } catch (error) {
+      console.error("Error creating adventure:", error);
+      res.status(400).json({ error: "Failed to create adventure" });
+    }
+  });
+
+  // Update adventure
+  app.patch("/api/adventures/:id", isAuthenticated, async (req, res) => {
+    try {
+      const adventure = await storage.getAdventure(req.params.id);
+      
+      if (!adventure) {
+        return res.status(404).json({ error: "Adventure not found" });
+      }
+      
+      if (adventure.hostId !== req.user!.id) {
+        return res.status(403).json({ error: "Only the host can update the adventure" });
+      }
+      
+      const updated = await storage.updateAdventure(req.params.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating adventure:", error);
+      res.status(400).json({ error: "Failed to update adventure" });
+    }
+  });
+
+  // Delete adventure
+  app.delete("/api/adventures/:id", isAuthenticated, async (req, res) => {
+    try {
+      const adventure = await storage.getAdventure(req.params.id);
+      
+      if (!adventure) {
+        return res.status(404).json({ error: "Adventure not found" });
+      }
+      
+      if (adventure.hostId !== req.user!.id) {
+        return res.status(403).json({ error: "Only the host can delete the adventure" });
+      }
+      
+      await storage.deleteAdventure(req.params.id);
+      res.sendStatus(204);
+    } catch (error) {
+      console.error("Error deleting adventure:", error);
+      res.status(500).json({ error: "Failed to delete adventure" });
+    }
+  });
+
+  // ===== INVITATIONS ROUTES =====
+  
+  // Get invitations for current user
+  app.get("/api/invitations", isAuthenticated, async (req, res) => {
+    try {
+      const invitations = await storage.getInvitations(req.user!.id);
+      res.json(invitations);
+    } catch (error) {
+      console.error("Error fetching invitations:", error);
+      res.status(500).json({ error: "Failed to fetch invitations" });
+    }
+  });
+
+  // Create invitation
+  app.post("/api/invitations", isAuthenticated, async (req, res) => {
+    try {
+      const { adventureId, userId } = req.body;
+      
+      // Verify the adventure exists and user is the host
+      const adventure = await storage.getAdventure(adventureId);
+      if (!adventure || adventure.hostId !== req.user!.id) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+      
+      const invitation = await storage.createInvitation({
+        adventureId,
+        userId,
+        status: "Pending",
+      });
+      
+      res.status(201).json(invitation);
+    } catch (error) {
+      console.error("Error creating invitation:", error);
+      res.status(400).json({ error: "Failed to create invitation" });
+    }
+  });
+
+  // Accept/decline invitation
+  app.patch("/api/invitations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const { status } = req.body; // "Accepted" or "Declined"
+      
+      const invitation = await storage.getInvitation(req.params.id);
+      if (!invitation) {
+        return res.status(404).json({ error: "Invitation not found" });
+      }
+      
+      if (invitation.userId !== req.user!.id) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+      
+      const updated = await storage.updateInvitationStatus(req.params.id, status);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating invitation:", error);
+      res.status(400).json({ error: "Failed to update invitation" });
+    }
+  });
+
+  // ===== OBJECT STORAGE ROUTES =====
+  
+  // Get upload URL for experience photo
+  app.post("/api/objects/upload", isAuthenticated, async (req, res) => {
+    try {
+      const objectStorageService = new ObjectStorageService();
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      res.json({ uploadURL });
+    } catch (error) {
+      console.error("Error getting upload URL:", error);
+      res.status(500).json({ error: "Failed to get upload URL" });
+    }
+  });
+
+  // Serve uploaded objects (with ACL check)
+  app.get("/objects/:objectPath(*)", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const objectStorageService = new ObjectStorageService();
+      
+      const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+      
+      const canAccess = await objectStorageService.canAccessObjectEntity({
+        objectFile,
+        userId: userId,
+        requestedPermission: ObjectPermission.READ,
+      });
+      
+      if (!canAccess) {
+        return res.sendStatus(403);
+      }
+      
+      objectStorageService.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error("Error accessing object:", error);
+      if (error instanceof ObjectNotFoundError) {
+        return res.sendStatus(404);
+      }
+      return res.sendStatus(500);
+    }
+  });
+
+  // Update experience with photo URL (sets ACL)
+  app.put("/api/experiences/:id/photo", isAuthenticated, async (req, res) => {
+    try {
+      const { photoUrl } = req.body;
+      
+      if (!photoUrl) {
+        return res.status(400).json({ error: "photoUrl is required" });
+      }
+      
+      const experience = await storage.getExperience(req.params.id);
+      if (!experience || experience.userId !== req.user!.id) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+      
+      const userId = req.user!.id;
+      const objectStorageService = new ObjectStorageService();
+      
+      // Set ACL policy - public visibility so friends can see
+      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
+        photoUrl,
+        {
+          owner: userId,
+          visibility: "public",
+        }
+      );
+      
+      // Update experience with normalized object path
+      const updated = await storage.updateExperience(req.params.id, {
+        photoUrl: objectPath,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating experience photo:", error);
+      res.status(500).json({ error: "Failed to update photo" });
+    }
+  });
+
+  const httpServer = createServer(app);
+
+  return httpServer;
+}

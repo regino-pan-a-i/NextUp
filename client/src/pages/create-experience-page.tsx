@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,9 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Upload } from "lucide-react";
+import { ArrowLeft, Upload, X, Users, Loader2 } from "lucide-react";
 import { ExperienceCategory, ExperienceStatus, insertExperienceSchema } from "@shared/schema";
 import { Card, CardContent } from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -33,6 +34,9 @@ export default function CreateExperiencePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [photoUrl, setPhotoUrl] = useState<string>("");
+  const [selectedFriends, setSelectedFriends] = useState<Set<string>>(new Set());
+  const [showFriendsList, setShowFriendsList] = useState(false);
+
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -50,17 +54,48 @@ export default function CreateExperiencePage() {
     },
   });
 
+  const { data: friends = [], isLoading: loadingFriends } = useQuery<any[]>({
+    queryKey: ["/api/friends"],
+    enabled: showFriendsList,
+  });
+
+
   const createMutation = useMutation({
     mutationFn: async (data: FormData) => {
       const response = await apiRequest("POST", "/api/experiences", data);
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: async (newExperience) => {
+      // Send recommendations to selected friends
+      if (selectedFriends.size > 0) {
+        const recommendationPromises = Array.from(selectedFriends).map(friendId =>
+          apiRequest("POST", "/api/recommendations", {
+            toUserId: friendId,
+            experienceId: newExperience.id,
+          })
+        );
+
+        try {
+          await Promise.all(recommendationPromises);
+          toast({
+            title: "Success",
+            description: `Experience created and recommended to ${selectedFriends.size} friend(s)!`,
+          });
+        } catch (error) {
+          toast({
+            title: "Partial Success",
+            description: "Experience created but some recommendations failed to send.",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Success",
+          description: "Experience created successfully!",
+        });
+      }
+
       queryClient.invalidateQueries({ queryKey: ["/api/experiences"] });
-      toast({
-        title: "Success",
-        description: "Experience created successfully!",
-      });
       setLocation("/experiences");
     },
     onError: (error: Error) => {
@@ -74,6 +109,24 @@ export default function CreateExperiencePage() {
 
   const onSubmit = async (data: FormData) => {
     await createMutation.mutateAsync({ ...data, photoUrl });
+  };
+
+  const toggleFriend = (friendId: string) => {
+    const newSelected = new Set(selectedFriends);
+    if (newSelected.has(friendId)) {
+      newSelected.delete(friendId);
+    } else {
+      newSelected.add(friendId);
+    }
+    setSelectedFriends(newSelected);
+  };
+
+  const getInitials = (username: string) => {
+    return username.slice(0, 2).toUpperCase();
+  };
+
+  const getSelectedFriendsData = () => {
+    return friends.filter(friend => selectedFriends.has(friend.id));
   };
 
   return (
@@ -230,6 +283,118 @@ export default function CreateExperiencePage() {
                   </SelectContent>
                 </Select>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Selected Friends Display */}
+          <Card>
+          <CardContent>
+              {selectedFriends.size > 0 && (
+                <div className="mb-4">
+                  <div className="flex flex-wrap gap-2">
+                    {getSelectedFriendsData().map((friend) => (
+                      <div
+                        key={friend.id}
+                        className="flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-sm"
+                      >
+                        <Avatar className="h-6 w-6">
+                          <AvatarFallback className="text-xs">
+                            {getInitials(friend.username)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span>{friend.username}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-4 w-4 p-0 hover:bg-destructive/20"
+                          onClick={() => toggleFriend(friend.id)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Show/Hide Friends List */}
+              {!showFriendsList ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowFriendsList(true)}
+                  className="w-full h-12"
+                  data-testid="button-show-friends"
+                >
+                  <Users className="h-4 w-4 mr-2" />
+                  {selectedFriends.size > 0 
+                    ? `Selected ${selectedFriends.size} friend(s) - Add more` 
+                    : "Select Friends to Recommend"
+                  }
+                </Button>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium">Select friends to recommend this experience:</p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowFriendsList(false)}
+                    >
+                      Done
+                    </Button>
+                  </div>
+                  
+                  {loadingFriends ? (
+                    <div className="flex justify-center py-4">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : friends.length === 0 ? (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <p className="text-sm">No friends found</p>
+                      <p className="text-xs">Add friends to start sharing experiences!</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {friends.map((friend) => {
+                        const isSelected = selectedFriends.has(friend.id);
+                        return (
+                          <div
+                            key={friend.id}
+                            className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                              isSelected 
+                                ? "bg-primary/10 border-primary border" 
+                                : "bg-muted/50 hover:bg-muted border border-transparent"
+                            }`}
+                            onClick={() => toggleFriend(friend.id)}
+                            data-testid={`friend-option-${friend.id}`}
+                          >
+                            <Avatar className="h-8 w-8">
+                              <AvatarFallback className="text-sm">
+                                {getInitials(friend.username)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium truncate">{friend.username}</p>
+                            </div>
+                            {isSelected && (
+                              <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                                <div className="h-2 w-2 rounded-full bg-primary-foreground" />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <p className="text-xs text-muted-foreground mt-2">
+                Selected friends will receive a recommendation for this experience after it's created.
+              </p>
             </CardContent>
           </Card>
 

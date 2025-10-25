@@ -148,6 +148,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get user by id (safe; strips password)
+  app.get("/api/users/:id", isAuthenticated, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.params.id);
+      if (!user) return res.sendStatus(404);
+      // remove password before returning
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...safe } = user as any;
+      res.json(safe);
+    } catch (err) {
+      console.error("Error fetching user by id:", err);
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
+
   // Get friends list
   app.get("/api/friends", isAuthenticated, async (req, res) => {
     try {
@@ -216,7 +231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (status === "Declined") {
         await storage.deleteFriendship(req.params.id);
-        return res.sendStatus(204);
+        return res.status(204).json({ message: "Friend request declined" });
       }
       
       const updated = await storage.updateFriendshipStatus(req.params.id, "Accepted");

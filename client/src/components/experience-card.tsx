@@ -20,7 +20,7 @@ export function ExperienceCard({ experience }: ExperienceCardProps) {
           {hasPhoto ? (
             <div className="relative aspect-[16/9] overflow-hidden">
               <img
-                src={experience.photoUrl}
+                src={experience.photoUrl ?? undefined}
                 alt={experience.name}
                 className="w-full h-full object-cover"
               />
@@ -67,7 +67,7 @@ export function ExperienceCard({ experience }: ExperienceCardProps) {
               )}
               {experience.moneyNeeded !== null && experience.moneyNeeded > 0 && (
                 <div className="flex items-center gap-1">
-                  <DollarSign className="h-3 w-3" />
+                  {/* <DollarSign className="h-3 w-3" /> */}
                   <span>${experience.moneyNeeded}</span>
                 </div>
               )}

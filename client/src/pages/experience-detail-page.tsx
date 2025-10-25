@@ -163,6 +163,14 @@ export default function ExperienceDetailPage() {
                 <Badge className={statusColors[experience.status as keyof typeof statusColors]}>
                   {experience.status}
                 </Badge>
+                
+                  <Button
+                    variant="outline"
+                    onClick={() => setLocation(`/experiences/${experience.id}/edit`)}
+                    data-testid="button-edit-experience"
+                  >
+                    Edit
+                  </Button>
               </div>
             </div>
 
@@ -252,7 +260,7 @@ export default function ExperienceDetailPage() {
                     )}
                   </div>
                 </div>
-                <div>
+                <div className="flex gap-2">
                   <Button
                     onClick={() => setLocation(`/adventures/${existingAdventure.id}`)}
                     data-testid="button-open-adventure"

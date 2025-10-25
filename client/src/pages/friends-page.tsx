@@ -89,18 +89,6 @@ export default function FriendsPage() {
           Friends
         </h1>
 
-        {/* Search bar */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search for friends..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 h-12"
-            data-testid="input-search-friends"
-          />
-        </div>
       </header>
 
       {/* Content */}
@@ -208,6 +196,18 @@ export default function FriendsPage() {
           </TabsContent>
 
           <TabsContent value="search" className="mt-0">
+            {/* Search bar */}
+            <div className="relative mb-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search for friends..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 h-12"
+                data-testid="input-search-friends"
+              />
+            </div>
             {searchQuery.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Search className="h-12 w-12 mx-auto mb-3 opacity-50" />

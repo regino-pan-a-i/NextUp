@@ -130,7 +130,34 @@ export default function CreateAdventurePage() {
       });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: async (newAdventure) => {
+      if (selectedFriends.size > 0) {
+        const invitePromises = Array.from(selectedFriends).map((friendId) =>
+          apiRequest("POST", "/api/invitations", {
+            userId: friendId,
+            adventureId: newAdventure.id,
+          })
+        );
+
+        try {
+          await Promise.all(invitePromises);
+          toast({
+            title: "Success",
+            description: `Adventure created and invites sent to ${selectedFriends.size} friend(s)!`,
+          });
+        } catch (err) {
+          toast({
+            title: "Partial Success",
+            description: "Adventure created but some invites failed to send.",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Success",
+          description: "Adventure created successfully!",
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/adventures"] });
       toast({
         title: "Success",

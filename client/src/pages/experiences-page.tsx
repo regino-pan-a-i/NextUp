@@ -170,7 +170,7 @@ export default function ExperiencesPage() {
       {/* Content */}
       <main className="px-4 py-6">
         <Tabs defaultValue="upcoming" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsList className="flex w-full  mb-6">
             <TabsTrigger value="upcoming" data-testid="tab-upcoming">Upcoming</TabsTrigger>
             <TabsTrigger value="invitations" data-testid="tab-invitations">
               Recommendations

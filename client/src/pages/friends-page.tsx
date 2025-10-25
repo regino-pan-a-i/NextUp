@@ -136,7 +136,12 @@ export default function FriendsPage() {
                   <Card key={friend.id} className="hover-elevate">
                     <CardContent className="p-4 flex items-center gap-3">
                       <Avatar className="h-12 w-12">
-                        <AvatarFallback>{getInitials(friend.username)}</AvatarFallback>
+                        {friend.photoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={friend.photoUrl} alt={friend.username} className="object-cover w-full h-full rounded-full" />
+                        ) : (
+                          <AvatarFallback>{getInitials(friend.username)}</AvatarFallback>
+                        )}
                       </Avatar>
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold truncate">{friend.username}</p>
@@ -164,7 +169,12 @@ export default function FriendsPage() {
                   <Card key={request.id}>
                     <CardContent className="p-4 flex items-center gap-3">
                       <Avatar className="h-12 w-12">
-                        <AvatarFallback>{getInitials(request.user.username)}</AvatarFallback>
+                        {request.user.photoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={request.user.photoUrl} alt={request.user.username} className="object-cover w-full h-full rounded-full" />
+                        ) : (
+                          <AvatarFallback>{getInitials(request.user.username)}</AvatarFallback>
+                        )}
                       </Avatar>
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold truncate">{request.user.username}</p>
@@ -217,7 +227,12 @@ export default function FriendsPage() {
                   <Card key={user.id} className="hover-elevate">
                     <CardContent className="p-4 flex items-center gap-3">
                       <Avatar className="h-12 w-12">
-                        <AvatarFallback>{getInitials(user.username)}</AvatarFallback>
+                        {user.photoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={user.photoUrl} alt={user.username} className="object-cover w-full h-full rounded-full" />
+                        ) : (
+                          <AvatarFallback>{getInitials(user.username)}</AvatarFallback>
+                        )}
                       </Avatar>
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold truncate">{user.username}</p>

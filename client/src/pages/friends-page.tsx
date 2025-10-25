@@ -324,25 +324,33 @@ export default function FriendsPage() {
                 onAction={() => setLocation("/groups/create")}
               />
             ) : (
-              <div className="space-y-4">
-                {groups.map((group: any) => (
-                  <Card
-                    key={group.id}
-                    className="hover-elevate cursor-pointer"
-                    data-testid={`card-group-${group.id}`}
-                    onClick={() => setLocation(`/groups/${group.id}`)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="font-semibold text-lg">{group.name}</h3>
-                          <p className="text-sm text-muted-foreground mt-1">{group.ownerId === undefined ? "" : "Group"}</p>
+              <div>
+                <div className="flex justify-end mb-4">
+                  <Button size="sm" onClick={() => setLocation("/groups/create")}> 
+                    <UserPlus className="h-4 w-4 mr-2" /> Create Group
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  {groups.map((group: any) => (
+                    <Card
+                      key={group.id}
+                      className="hover-elevate cursor-pointer"
+                      data-testid={`card-group-${group.id}`}
+                      onClick={() => setLocation(`/groups/${group.id}`)}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="font-semibold text-lg">{group.name}</h3>
+                            <p className="text-sm text-muted-foreground mt-1">{group.ownerId === undefined ? "" : "Group"}</p>
+                          </div>
+                          <div className="text-sm text-muted-foreground">Members</div>
                         </div>
-                        <div className="text-sm text-muted-foreground">Members</div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               </div>
             )}
           </TabsContent>

@@ -119,9 +119,9 @@ export default function GroupDetailPage() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-4">
-              <Avatar className="h-12 w-12">
+              {/* <Avatar className="h-12 w-12">
                 <AvatarFallback>{getInitials(group.name)}</AvatarFallback>
-              </Avatar>
+              </Avatar> */}
               <div>
                 <h2 className="font-semibold text-lg">{group.name}</h2>
                 <p className="text-sm text-muted-foreground">{isOwner ? "You are the owner" : `Owner: ${group.ownerId}`}</p>

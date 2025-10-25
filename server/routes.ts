@@ -374,8 +374,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (adventure.hostId !== req.user!.id) {
         return res.status(403).json({ error: "Only the host can update the adventure" });
       }
-      
-      const updated = await storage.updateAdventure(req.params.id, req.body);
+      // Ensure date fields are proper Date objects for the DB layer
+      const payload = { ...req.body } as any;
+      if (payload.date !== undefined && payload.date !== null) {
+        // If the client sent an ISO string, convert to Date
+        if (typeof payload.date === "string") {
+          payload.date = new Date(payload.date);
+        }
+      } else if (payload.date === null) {
+        // allow null to clear the date
+        payload.date = null;
+      }
+
+      const updated = await storage.updateAdventure(req.params.id, payload);
       res.json(updated);
     } catch (error) {
       console.error("Error updating adventure:", error);

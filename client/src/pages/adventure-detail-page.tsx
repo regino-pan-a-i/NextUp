@@ -65,7 +65,13 @@ export default function AdventureDetailPage() {
         <Card>
           <CardContent className="p-6">
             <h2 className="text-2xl font-bold mb-2">{adventure.name}</h2>
-
+                  <Button
+                    variant="outline"
+                    onClick={() => setLocation(`/adventures/${adventure.id}/edit`)}
+                    data-testid="button-edit-adventure"
+                  >
+                    Edit
+                  </Button>
             <div className="space-y-3 text-sm">
               {adventure.place && (
                 <div className="flex items-center gap-2">

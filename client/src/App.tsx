@@ -15,7 +15,12 @@ import FriendsPage from "@/pages/friends-page";
 import AdventuresPage from "@/pages/adventures-page";
 import CreateAdventurePage from "@/pages/create-adventure-page";
 import AdventureDetailPage from "@/pages/adventure-detail-page";
+import EditAdventurePage from "@/pages/edit-adventure-page";
+import EditExperiencePage from "@/pages/edit-experience-page";
+import CreateGroupPage from "@/pages/create-group-page";
 import ProfilePage from "@/pages/profile-page";
+import GroupDetailPage from "@/pages/group-detail-page";
+import GroupChatPage from "@/pages/group-chat-page";
 
 function Router() {
   return (
@@ -24,11 +29,16 @@ function Router() {
       <ProtectedRoute path="/" component={HomePage} />
       <ProtectedRoute path="/experiences" component={ExperiencesPage} />
       <ProtectedRoute path="/experiences/create" component={CreateExperiencePage} />
+      <ProtectedRoute path="/experiences/:id/edit" component={EditExperiencePage} />
       <ProtectedRoute path="/experiences/:id" component={ExperienceDetailPage} />
-  <ProtectedRoute path="/friends" component={FriendsPage} />
-  <ProtectedRoute path="/adventures" component={AdventuresPage} />
-  <ProtectedRoute path="/adventures/create" component={CreateAdventurePage} />
-  <ProtectedRoute path="/adventures/:id" component={AdventureDetailPage} />
+      <ProtectedRoute path="/friends" component={FriendsPage} />
+      <ProtectedRoute path="/adventures" component={AdventuresPage} />
+      <ProtectedRoute path="/adventures/create" component={CreateAdventurePage} />
+      <ProtectedRoute path="/adventures/:id/edit" component={EditAdventurePage} />
+      <ProtectedRoute path="/adventures/:id" component={AdventureDetailPage} />
+      <ProtectedRoute path="/groups/create" component={CreateGroupPage} />
+  <ProtectedRoute path="/groups/:id/chat" component={GroupChatPage} />
+      <ProtectedRoute path="/groups/:id" component={GroupDetailPage} />
       <ProtectedRoute path="/profile" component={ProfilePage} />
       <Route component={NotFound} />
     </Switch>

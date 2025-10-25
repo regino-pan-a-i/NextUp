@@ -306,13 +306,33 @@ export default function CreateExperiencePage() {
               {/* Recommended by */}
               <div className="space-y-2">
                 <Label htmlFor="recommendedBy">Recommended by</Label>
-                <Input
-                  id="recommendedBy"
-                  placeholder="Who recommended this?"
-                  {...form.register("recommendedBy")}
-                  data-testid="input-experience-recommended-by"
-                  className="h-12"
-                />
+                <Select
+                  value={(form.watch("recommendedBy") ?? "") as string}
+                  onValueChange={(value) => form.setValue("recommendedBy", value as any)}
+                >
+                  <SelectTrigger className="h-12" data-testid="select-recommended-by">
+                    <SelectValue placeholder="Select a friend" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* Allow explicit none */}
+                    <SelectItem value="NONE">None</SelectItem>
+                    {loadingFriends ? (
+                      <SelectItem value="NONE" disabled>
+                        Loading...
+                      </SelectItem>
+                    ) : friends.length === 0 ? (
+                      <SelectItem value="NONE" disabled>
+                        No friends
+                      </SelectItem>
+                    ) : (
+                      friends.map((f: any) => (
+                        <SelectItem key={f.id ?? f.name ?? f} value={String(f.username)}>
+                          {f.username}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Status */}
@@ -339,7 +359,8 @@ export default function CreateExperiencePage() {
 
           {/* Selected Friends Display */}
           <Card>
-          <CardContent>
+          <CardContent className="p-6">
+            <Label className="block mb-3">Send to a Friend</Label>
               {selectedFriends.size > 0 && (
                 <div className="mb-4">
                   <div className="flex flex-wrap gap-2">
@@ -349,9 +370,12 @@ export default function CreateExperiencePage() {
                         className="flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-sm"
                       >
                         <Avatar className="h-6 w-6">
-                          <AvatarFallback className="text-xs">
-                            {getInitials(friend.username)}
-                          </AvatarFallback>
+                          {friend.photoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={friend.photoUrl} alt={friend.username} className="object-cover w-full h-full rounded-full" />
+                          ) : (
+                            <AvatarFallback className="text-xs">{getInitials(friend.username)}</AvatarFallback>
+                          )}
                         </Avatar>
                         <span>{friend.username}</span>
                         <Button

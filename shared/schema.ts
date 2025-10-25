@@ -1,6 +1,6 @@
 import { sql, relations } from "drizzle-orm";
 import { pgTable, text, varchar, timestamp, integer, pgEnum } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
+import { createInsertSchema} from "drizzle-zod";
 import { z } from "zod";
 
 // Enums for status fields
@@ -98,12 +98,38 @@ export const adventures = pgTable("adventures", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Groups table
+export const groups = pgTable("groups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  ownerId: varchar("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Group members (links users to groups). memberId can be null to allow placeholder/anonymous members.
+export const groupMembers = pgTable("group_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  groupId: varchar("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
+  memberId: varchar("member_id").references(() => users.id),
+  role: varchar("role"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Adventure invitations
 export const invitations = pgTable("invitations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   adventureId: varchar("adventure_id").notNull().references(() => adventures.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   status: invitationStatusEnum("status").default("Pending").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Messages for group chat
+export const messages = pgTable("messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  groupId: varchar("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
+  senderId: varchar("sender_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -116,6 +142,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   receivedRecommendations: many(recommendations, { relationName: "receivedRecommendations" }),
   hostedAdventures: many(adventures),
   invitations: many(invitations),
+  groupsHosted: many(groups),
+  groupMemberships: many(groupMembers),
 }));
 
 export const experiencesRelations = relations(experiences, ({ one, many }) => ({
@@ -169,6 +197,25 @@ export const adventuresRelations = relations(adventures, ({ one, many }) => ({
   invitations: many(invitations),
 }));
 
+export const groupsRelations = relations(groups, ({ one, many }) => ({
+  owner: one(users, {
+    fields: [groups.ownerId],
+    references: [users.id],
+  }),
+  members: many(groupMembers),
+}));
+
+export const groupMembersRelations = relations(groupMembers, ({ one }) => ({
+  group: one(groups, {
+    fields: [groupMembers.groupId],
+    references: [groups.id],
+  }),
+  user: one(users, {
+    fields: [groupMembers.memberId],
+    references: [users.id],
+  }),
+}));
+
 export const invitationsRelations = relations(invitations, ({ one }) => ({
   adventure: one(adventures, {
     fields: [invitations.adventureId],
@@ -213,6 +260,21 @@ export const insertAdventureSchema = createInsertSchema(adventures, {
     createdAt: true,
 });
 
+export const insertGroupSchema = createInsertSchema(groups).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertGroupMemberSchema = createInsertSchema(groupMembers).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertMessageSchema = createInsertSchema(messages).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertInvitationSchema = createInsertSchema(invitations).omit({
   id: true,
   createdAt: true,
@@ -236,6 +298,15 @@ export type InsertAdventure = z.infer<typeof insertAdventureSchema>;
 
 export type Invitation = typeof invitations.$inferSelect;
 export type InsertInvitation = z.infer<typeof insertInvitationSchema>;
+
+export type Group = typeof groups.$inferSelect;
+export type InsertGroup = z.infer<typeof insertGroupSchema>;
+
+export type GroupMember = typeof groupMembers.$inferSelect;
+export type InsertGroupMember = z.infer<typeof insertGroupMemberSchema>;
+
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
 
 // Enums as const for frontend use
 export const ExperienceStatus = {
@@ -272,3 +343,5 @@ export const InvitationStatus = {
   Accepted: "Accepted",
   Declined: "Declined",
 } as const;
+
+// keep file end consistent

@@ -6,6 +6,9 @@ import {
   recommendations,
   adventures,
   invitations,
+  groups,
+  groupMembers,
+  messages,
   type User,
   type InsertUser,
   type Experience,
@@ -18,6 +21,12 @@ import {
   type InsertAdventure,
   type Invitation,
   type InsertInvitation,
+  type Group,
+  type InsertGroup,
+  type GroupMember,
+  type InsertGroupMember,
+  type Message,
+  type InsertMessage,
 } from "@shared/schema";
 import { db, pool } from "./db";
 import { eq, and, or, ilike, desc } from "drizzle-orm";
@@ -71,6 +80,19 @@ export interface IStorage {
   createInvitation(invitation: InsertInvitation): Promise<Invitation>;
   updateInvitationStatus(id: string, status: "Accepted" | "Declined"): Promise<Invitation | undefined>;
   deleteInvitation(id: string): Promise<void>;
+
+  // Groups
+  getGroup(id: string): Promise<Group | undefined>;
+  getGroups(userId: string): Promise<Group[]>;
+  createGroup(group: InsertGroup & { ownerId: string }): Promise<Group>;
+  updateGroup(id: string, group: Partial<InsertGroup>): Promise<Group | undefined>;
+  deleteGroup(id: string): Promise<void>;
+  addGroupMember(groupId: string, memberId?: string): Promise<GroupMember>;
+  removeGroupMember(groupId: string, memberId?: string): Promise<void>;
+  getGroupMembers(groupId: string): Promise<(GroupMember & { user?: User })[]>;
+  // Messages
+  getMessages(groupId: string): Promise<Message[]>;
+  createMessage(groupId: string, senderId: string, content: string): Promise<Message>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -364,6 +386,82 @@ export class DatabaseStorage implements IStorage {
 
   async deleteInvitation(id: string): Promise<void> {
     await db.delete(invitations).where(eq(invitations.id, id));
+  }
+
+  // Groups
+  async getGroup(id: string): Promise<Group | undefined> {
+    const [g] = await db.select().from(groups).where(eq(groups.id, id));
+    return g || undefined;
+  }
+
+  async getGroups(userId: string): Promise<Group[]> {
+    // Groups the user owns
+    const owned = await db.select().from(groups).where(eq(groups.ownerId, userId));
+
+    // Groups where the user is a member
+    const memberships = await db.select().from(groupMembers).where(eq(groupMembers.memberId, userId));
+    const memberGroupIds = memberships.map(m => m.groupId);
+
+    let memberGroups: Group[] = [];
+    if (memberGroupIds.length > 0) {
+      memberGroups = await db.select().from(groups).where(or(...memberGroupIds.map(id => eq(groups.id, id))));
+    }
+
+    // Combine and deduplicate
+    const all = [...owned, ...memberGroups];
+    const unique = Array.from(new Map(all.map(g => [g.id, g])).values());
+    return unique;
+  }
+
+  async createGroup(group: InsertGroup & { ownerId: string }): Promise<Group> {
+    const [newGroup] = await db.insert(groups).values(group).returning();
+    return newGroup;
+  }
+
+  async updateGroup(id: string, group: Partial<InsertGroup>): Promise<Group | undefined> {
+    const [updated] = await db.update(groups).set(group as any).where(eq(groups.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteGroup(id: string): Promise<void> {
+    await db.delete(groups).where(eq(groups.id, id));
+  }
+
+  async addGroupMember(groupId: string, memberId?: string): Promise<GroupMember> {
+    const [member] = await db.insert(groupMembers).values({ groupId, memberId }).returning();
+    return member;
+  }
+
+  async removeGroupMember(groupId: string, memberId?: string): Promise<void> {
+    if (memberId === undefined) {
+      // remove entries where memberId IS NULL
+      await db.delete(groupMembers).where(and(eq(groupMembers.groupId, groupId), /* memberId IS NULL */ (groupMembers.memberId as any).isNull()));
+    } else {
+      await db.delete(groupMembers).where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.memberId, memberId)));
+    }
+  }
+
+  async getGroupMembers(groupId: string): Promise<(GroupMember & { user?: User })[]> {
+    const members = await db.select().from(groupMembers).where(eq(groupMembers.groupId, groupId));
+    const results = await Promise.all(
+      members.map(async (m) => {
+        if (!m.memberId) return { ...m, user: undefined };
+        const [user] = await db.select().from(users).where(eq(users.id, m.memberId));
+        return { ...m, user };
+      })
+    );
+    return results;
+  }
+
+  // Messages
+  async getMessages(groupId: string): Promise<Message[]> {
+    const msgs = await db.select().from(messages).where(eq(messages.groupId, groupId)).orderBy(desc(messages.createdAt));
+    return msgs;
+  }
+
+  async createMessage(groupId: string, senderId: string, content: string): Promise<Message> {
+    const [msg] = await db.insert(messages).values({ groupId, senderId, content }).returning();
+    return msg;
   }
 }
 

@@ -6,7 +6,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ExperienceCard } from "@/components/experience-card";
 import { Plus, TrendingUp, CheckCircle2, Users as UsersIcon, Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
-import { Experience } from "@shared/schema";
+import { Experience, Adventure } from "@shared/schema";
+import { format } from "date-fns";
+import { Badge } from "@/components/ui/badge";
+
 
 export default function HomePage() {
   const { user } = useAuth();
@@ -18,6 +21,34 @@ export default function HomePage() {
 
   const { data: friends = [], isLoading: loadingFriends } = useQuery<any[]>({
     queryKey: ["/api/friends"],
+  });
+
+  const { data: adventures = [], isLoading: loadingAdventures } = useQuery<Adventure[]>({
+    queryKey: ["/api/adventures"],
+  });
+
+  const now = new Date();
+
+  const pastAdventures = (adventures || []).filter((a) => a.date && new Date(a.date) < now);
+
+  // Combine completed experiences and past adventures into a unified recent activity list
+  const completedExperiences = experiences.filter((e) => e.status === "Completed");
+
+  // Normalize to a common shape for rendering
+  type RecentItem = {
+    id: string;
+    name: string;
+    date?: string | null;
+    type: "experience" | "adventure";
+  };
+
+  const recentActivity: RecentItem[] = [
+    ...completedExperiences.map((e) => ({ id: e.id, name: e.name, date: e.createdAt as any, type: "experience" as const })),
+    ...pastAdventures.map((a) => ({ id: a.id, name: a.name, date: a.date as any, type: "adventure" as const })),
+  ].sort((a, b) => {
+    const da = a.date ? new Date(a.date).getTime() : 0;
+    const db = b.date ? new Date(b.date).getTime() : 0;
+    return db - da;
   });
 
   const nextUpExperiences = experiences.filter(e => e.status === "NextUp").slice(0, 3);
@@ -106,16 +137,43 @@ export default function HomePage() {
           )}
         </section>
 
-        {/* Recent Activity */}
+  {/* Recent Activity */}
         <section>
           <h2 className="text-xl font-semibold mb-4" style={{ fontFamily: "var(--font-heading)" }}>
             Recent Activity
           </h2>
-          
-          <div className="text-center py-12 text-muted-foreground">
-            <p>No recent activity</p>
-            <p className="text-sm mt-1">Connect with friends to see updates!</p>
-          </div>
+          {(loadingAdventures || loadingExperiences) ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : recentActivity.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <p>No recent activity</p>
+              <p className="text-sm mt-1">Connect with friends to see updates!</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recentActivity.map((recent) => (
+                <Card key={recent.id} className="opacity-90">
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-sm">{recent.name}</p>
+                        {recent.date && (
+                          <p className="text-xs text-muted-foreground">
+                            {format(new Date(recent.date), "PPP")}
+                          </p>
+                        )}
+                      </div>
+                      <Badge className="bg-green-500/10 text-green-700 dark:text-green-300">
+                        {recent.type === "adventure" ? "Past Event" : "Completed"}
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </section>
       </main>
 

@@ -254,7 +254,6 @@ export default function ExperienceDetailPage() {
                 </div>
                 <div>
                   <Button
-                    variant="ghost"
                     onClick={() => setLocation(`/adventures/${existingAdventure.id}`)}
                     data-testid="button-open-adventure"
                   >

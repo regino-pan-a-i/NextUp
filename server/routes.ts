@@ -763,6 +763,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/places/search", async (req, res) => {
+  try {
+    const { q } = req.query;
+    
+    if (!q || typeof q !== 'string') {
+      return res.status(400).json({ error: "Search query required" });
+    }
+
+    const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "Google Places API not configured" });
+    }
+
+    const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(q)}&key=${apiKey}&fields=place_id,name,formatted_address,rating,user_ratings_total,price_level,photos,opening_hours,formatted_phone_number,website,types`;
+
+    const response = await fetch(searchUrl);
+    const data = await response.json();
+
+    if (!response.ok) {
+      return res.status(response.status).json({ error: data.error_message || "Places API error" });
+    }
+
+    res.json({
+      results: data.results || [],
+      status: data.status
+    });
+  } catch (error) {
+    console.error("Places search error:", error);
+    res.status(500).json({ error: "Failed to search places" });
+  }
+});
+
+// Get place photo
+app.get("/api/places/photo", async (req, res) => {
+  try {
+    const { photo_reference, maxwidth = "400" } = req.query;
+    
+    if (!photo_reference) {
+      return res.status(400).json({ error: "Photo reference required" });
+    }
+
+    const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "Google Places API not configured" });
+    }
+
+    const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?photoreference=${photo_reference}&maxwidth=${maxwidth}&key=${apiKey}`;
+
+    // Proxy the image request
+    const response = await fetch(photoUrl);
+    
+    if (!response.ok) {
+      return res.status(404).json({ error: "Photo not found" });
+    }
+
+    // Forward the image
+    const buffer = await response.arrayBuffer();
+    res.set({
+      'Content-Type': response.headers.get('content-type') || 'image/jpeg',
+      'Cache-Control': 'public, max-age=86400', // Cache for 1 day
+    });
+    res.send(Buffer.from(buffer));
+  } catch (error) {
+    console.error("Photo fetch error:", error);
+    res.status(500).json({ error: "Failed to fetch photo" });
+  }
+});
+
+
   const httpServer = createServer(app);
 
   // Setup a WebSocket server for real-time group chat broadcasts.

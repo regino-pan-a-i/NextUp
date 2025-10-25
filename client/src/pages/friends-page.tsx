@@ -49,11 +49,7 @@ export default function FriendsPage() {
     },
     onSuccess: (_, friendId) => {
       // Add to sent requests set
-      setSentRequests(prev => {
-        const s = new Set(prev);
-        s.add(friendId);
-        return s;
-      });
+      setSentRequests(prev => new Set(Array.from(prev).concat(friendId)));
       
       queryClient.invalidateQueries({ queryKey: ["/api/friends"] });
       toast({
@@ -64,11 +60,7 @@ export default function FriendsPage() {
     onError: (error: Error, friendId) => {
       // If error is "already sent", also mark as sent
       if (error.message.includes("already sent") || error.message.includes("already exists")) {
-        setSentRequests(prev => {
-          const s = new Set(prev);
-          s.add(friendId);
-          return s;
-        });
+        setSentRequests(prev => new Set(Array.from(prev).concat(friendId)));
         toast({
           title: "Already Sent",
           description: "You've already sent a friend request to this user.",

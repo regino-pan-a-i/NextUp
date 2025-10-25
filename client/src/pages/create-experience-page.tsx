@@ -21,6 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { PlaceSearch } from "@/components/place-search-page";
 
 const formSchema = insertExperienceSchema.extend({
   name: z.string().min(1, "Name is required"),
@@ -38,7 +39,7 @@ export default function CreateExperiencePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFriends, setSelectedFriends] = useState<Set<string>>(new Set());
   const [showFriendsList, setShowFriendsList] = useState(false);
-
+  const [selectedPlace, setSelectedPlace] = useState<any>(null); 
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -61,10 +62,22 @@ export default function CreateExperiencePage() {
     enabled: showFriendsList,
   });
 
-
   const createMutation = useMutation({
     mutationFn: async (data: FormData) => {
-      const response = await apiRequest("POST", "/api/experiences", data);
+      
+      const placeData = selectedPlace ? {
+        placeId: selectedPlace.place_id,
+        placeAddress: selectedPlace.formatted_address,
+        placeRating: selectedPlace.rating,
+        placePhotoUrl: selectedPlace.photos?.[0]?.photo_reference ? 
+          `/api/places/photo?photo_reference=${selectedPlace.photos[0].photo_reference}&maxwidth=400` : null,
+      } : {};
+
+      const response = await apiRequest("POST", "/api/experiences", { 
+        ...data, 
+        photoUrl,
+        ...placeData 
+      });
       return response.json();
     },
     onSuccess: async (newExperience) => {
@@ -263,15 +276,16 @@ export default function CreateExperiencePage() {
                 </Select>
               </div>
 
-              {/* Place */}
+              
               <div className="space-y-2">
                 <Label htmlFor="place">Place</Label>
-                <Input
-                  id="place"
-                  placeholder="Where is this experience?"
-                  {...form.register("place")}
-                  data-testid="input-experience-place"
-                  className="h-12"
+                <PlaceSearch
+                  value={form.watch("place") || ""}
+                  onPlaceSelect={(place) => {
+                    setSelectedPlace(place);
+                    form.setValue("place", place?.name || "");
+                  }}
+                  placeholder="Search for a place or location..."
                 />
               </div>
 

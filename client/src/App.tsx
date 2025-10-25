@@ -40,6 +40,7 @@ function Router() {
   <ProtectedRoute path="/groups/:id/chat" component={GroupChatPage} />
       <ProtectedRoute path="/groups/:id" component={GroupDetailPage} />
       <ProtectedRoute path="/profile" component={ProfilePage} />
+
       <Route component={NotFound} />
     </Switch>
   );

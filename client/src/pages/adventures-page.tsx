@@ -1,14 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { BottomNav } from "@/components/bottom-nav";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Calendar, Plus, MapPin, DollarSign, Clock, Users, Loader2 } from "lucide-react";
+import { Calendar, Plus, MapPin, DollarSign, Clock, Users, Loader2, Check, X } from "lucide-react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { Adventure, Invitation } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+
+
 
 export default function AdventuresPage() {
   const [, setLocation] = useLocation();
@@ -20,16 +24,59 @@ export default function AdventuresPage() {
   const { data: invitations = [], isLoading: loadingInvitations } = useQuery<(Invitation & { adventure: Adventure })[]>({
     queryKey: ["/api/invitations"],
   });
+  const { toast } = useToast();
 
+  const respondToInvitationMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const response = await apiRequest("PATCH", `/api/invitations/${id}`, { status });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/adventures"] });
+      toast({
+        title: "Success",
+        description: "Invitation updated!",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
   const now = new Date();
-  const upcomingAdventures = adventures.filter(a => !a.date || new Date(a.date) >= now);
-  const pastAdventures = adventures.filter(a => a.date && new Date(a.date) < now);
-  const pendingInvitations = invitations.filter(i => i.status === "Pending");
 
-  const getInitials = (username: string) => {
-    return username.slice(0, 2).toUpperCase();
-  };
+  const upcomingAdventures = adventures
+    .filter((a) => {
+      const isUpcoming = !a.date || new Date(a.date) >= now;
+      if (!isUpcoming) return false;
 
+      // If there's an invitation for this adventure, and it has a status,
+      // only include the adventure when that status is "Accepted".
+      const inv = invitations.find(
+        (i: any) =>
+          (i.adventure && i.adventure.id === a.id) ||
+          // fallback if invitation stores adventureId separately
+          (i.adventureId && i.adventureId === a.id)
+      );
+
+      if (!inv) return true; // no invitation => include
+      // if invitation exists but no status field, include; otherwise require "Accepted"
+      return inv.status ? inv.status === "Accepted" : true;
+    })
+    .sort((a, b) => {
+      // Put dated adventures first, sorted by date ascending. Undated go last.
+      if (!a.date && !b.date) return 0;
+      if (!a.date) return 1;
+      if (!b.date) return -1;
+      return new Date(a.date).getTime() - new Date(b.date).getTime();
+    });
+
+  const pastAdventures = adventures.filter((a) => a.date && new Date(a.date) < now);
+  const pendingInvitations = invitations.filter((i) => i.status === "Pending");
   return (
     <div className="min-h-screen pb-20 bg-background">
       {/* Header */}
@@ -146,22 +193,77 @@ export default function AdventuresPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {pendingInvitations.map((invitation: any) => (
-                  <Card
-                    key={invitation.id}
-                    className="cursor-pointer"
-                    onClick={() => setLocation(`/adventures/${invitation.adventure.id}`)}
-                  >
-                    <CardContent className="p-4">
-                      <h3 className="font-semibold text-lg mb-2">{invitation.adventure.name}</h3>
-                      {invitation.adventure.place && (
-                        <p className="text-sm text-muted-foreground mb-4">
-                          at {invitation.adventure.place}
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
+                {pendingInvitations.map((invitation: any) => {
+                  const adv = invitation.adventure ?? {};
+                  return (
+                    <Card key={invitation.id} className="hover-elevate">
+                      <CardContent className="p-4">
+                        <div className="flex gap-4 items-center">
+                          {/* Date block */}
+                          <div className="flex-shrink-0 w-16 text-center">
+                            <div className="bg-primary/10 rounded-lg p-2">
+                              <Calendar className="h-6 w-6 text-primary mx-auto mb-1" />
+                              {adv.date && (
+                                <div className="text-xs font-semibold">
+                                  {format(new Date(adv.date), "MMM d")}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Adventure details */}
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-lg mb-1">{adv.name}</h3>
+
+                            {adv.place && (
+                              <div className="flex items-center gap-1 text-sm text-muted-foreground mb-2">
+                                <MapPin className="h-3 w-3" />
+                                <span>{adv.place}</span>
+                              </div>
+                            )}
+
+                            <div className="flex flex-wrap gap-3 text-xs text-muted-foreground mb-3">
+                              {adv.cost > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <DollarSign className="h-3 w-3" />
+                                  <span>${adv.cost}</span>
+                                </div>
+                              )}
+                              {adv.timeRequired > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  <span>{Math.floor(adv.timeRequired / 60)}h</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex flex-col items-end gap-2">
+                            <Button
+                              size="icon"
+                              variant="default"
+                              onClick={() => respondToInvitationMutation.mutate({ id: invitation.id, status: "Accepted" })}
+                              disabled={respondToInvitationMutation.isPending}
+                              data-testid={`button-accept-invitation-${invitation.id}`}
+                            >
+                              <Check className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              onClick={() => respondToInvitationMutation.mutate({ id: invitation.id, status: "Declined" })}
+                              disabled={respondToInvitationMutation.isPending}
+                              data-testid={`button-decline-invitation-${invitation.id}`}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </TabsContent>

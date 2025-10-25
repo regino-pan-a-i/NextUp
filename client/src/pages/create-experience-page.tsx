@@ -306,13 +306,33 @@ export default function CreateExperiencePage() {
               {/* Recommended by */}
               <div className="space-y-2">
                 <Label htmlFor="recommendedBy">Recommended by</Label>
-                <Input
-                  id="recommendedBy"
-                  placeholder="Who recommended this?"
-                  {...form.register("recommendedBy")}
-                  data-testid="input-experience-recommended-by"
-                  className="h-12"
-                />
+                <Select
+                  value={(form.watch("recommendedBy") ?? "") as string}
+                  onValueChange={(value) => form.setValue("recommendedBy", value as any)}
+                >
+                  <SelectTrigger className="h-12" data-testid="select-recommended-by">
+                    <SelectValue placeholder="Select a friend" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* Allow explicit none */}
+                    <SelectItem value="NONE">None</SelectItem>
+                    {loadingFriends ? (
+                      <SelectItem value="NONE" disabled>
+                        Loading...
+                      </SelectItem>
+                    ) : friends.length === 0 ? (
+                      <SelectItem value="NONE" disabled>
+                        No friends
+                      </SelectItem>
+                    ) : (
+                      friends.map((f: any) => (
+                        <SelectItem key={f.id ?? f.name ?? f} value={String(f.username)}>
+                          {f.username}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Status */}
@@ -339,7 +359,8 @@ export default function CreateExperiencePage() {
 
           {/* Selected Friends Display */}
           <Card>
-          <CardContent>
+          <CardContent className="p-6">
+            <Label className="block mb-3">Send to a Friend</Label>
               {selectedFriends.size > 0 && (
                 <div className="mb-4">
                   <div className="flex flex-wrap gap-2">
